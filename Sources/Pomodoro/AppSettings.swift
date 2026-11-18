@@ -22,6 +22,20 @@ enum BlockAction: String, CaseIterable, Identifiable {
     }
 }
 
+enum DisplayMode: String, CaseIterable, Identifiable {
+    case menuBar, floating, both
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .menuBar: return "Menu bar"
+        case .floating: return "Floating widget"
+        case .both: return "Both"
+        }
+    }
+    var showsMenuBar: Bool { self != .floating }
+    var showsWidget: Bool { self != .menuBar }
+}
+
 struct ListedApp: Codable, Hashable, Identifiable {
     var bundleID: String
     var name: String
@@ -47,6 +61,25 @@ final class AppSettings: ObservableObject {
         static let blockAction = "blockAction"
         static let blockedApps = "blockedApps"
         static let allowedApps = "allowedApps"
+        static let displayMode = "displayMode"
+        static let widgetOpacity = "widgetOpacity"
+    }
+
+    @Published var displayMode: DisplayMode {
+        didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
+    }
+    @Published var widgetOpacity: Double {
+        didSet { defaults.set(widgetOpacity, forKey: Key.widgetOpacity) }
+    }
+
+    /// Bound to the menu bar item's visibility. If the user ⌘-drags the item out of
+    /// the menu bar, fall back to the floating widget so the timer never disappears.
+    var showsMenuBarItem: Bool {
+        get { displayMode.showsMenuBar }
+        set {
+            if !newValue, displayMode.showsMenuBar { displayMode = .floating }
+            if newValue, displayMode == .floating { displayMode = .both }
+        }
     }
 
     @Published var focusMinutes: Int {
@@ -118,7 +151,11 @@ final class AppSettings: ObservableObject {
             Key.blockingEnabled: false,
             Key.blockMode: BlockMode.blocklist.rawValue,
             Key.blockAction: BlockAction.hide.rawValue,
+            Key.displayMode: DisplayMode.menuBar.rawValue,
+            Key.widgetOpacity: 1.0,
         ])
+        displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .menuBar
+        widgetOpacity = defaults.double(forKey: Key.widgetOpacity)
         focusMinutes = defaults.integer(forKey: Key.focus)
         shortBreakMinutes = defaults.integer(forKey: Key.shortBreak)
         longBreakMinutes = defaults.integer(forKey: Key.longBreak)

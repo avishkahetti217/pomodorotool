@@ -4,6 +4,7 @@ A native macOS menu bar Pomodoro timer (SwiftUI, macOS 13+).
 
 ## Features
 - **Menu bar countdown** for focus sessions and breaks (icon changes per phase; pause icon when paused)
+- **Floating widget** (optional, Settings → Display): always-on-top card with countdown, progress bar and controls. Drag it anywhere (position is remembered), snap it to a corner, and adjust its opacity. Choose Menu bar, Floating widget, or Both.
 - **Configurable durations**: focus, short break, long break, and how many sessions before a long break (default 4)
 - **Sound + notification** at the end of every session (14 system sounds, preview, optional sound after breaks)
 - **Daily tracking**: pomodoros and focus minutes per day, 14-day chart, 7-day total, streak

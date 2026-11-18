@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum SettingsTab: Hashable { case timer, blocking, stats }
+enum SettingsTab: Hashable { case timer, display, blocking, stats }
 
 /// Owns the settings window. A plain NSWindow is used because SwiftUI's `Settings`
 /// scene doesn't reliably come to the front in menu-bar-only apps.
@@ -53,6 +53,9 @@ struct SettingsView: View {
             TimerSettingsView()
                 .tabItem { Label("Timer", systemImage: "timer") }
                 .tag(SettingsTab.timer)
+            DisplaySettingsView()
+                .tabItem { Label("Display", systemImage: "macwindow") }
+                .tag(SettingsTab.display)
             BlockingSettingsView()
                 .tabItem { Label("Focus Blocking", systemImage: "hand.raised") }
                 .tag(SettingsTab.blocking)
@@ -155,6 +158,67 @@ struct MinutesRow: View {
                 Text("min").foregroundStyle(.secondary)
                 Stepper(title, value: $value, in: range).labelsHidden()
             }
+        }
+    }
+}
+
+// MARK: - Display
+
+struct DisplaySettingsView: View {
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Show the timer in", selection: $settings.displayMode) {
+                    ForEach(DisplayMode.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+            } footer: {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Floating widget") {
+                LabeledContent("Opacity") {
+                    HStack {
+                        Slider(value: $settings.widgetOpacity, in: 0.4...1.0)
+                            .frame(width: 180)
+                        Text("\(Int(settings.widgetOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+                LabeledContent("Move to corner") {
+                    HStack(spacing: 6) {
+                        ForEach(ScreenCorner.allCases) { corner in
+                            Button {
+                                AppState.shared.widget.move(to: corner)
+                            } label: {
+                                Image(systemName: corner.symbol).frame(width: 18)
+                            }
+                            .help(corner.label)
+                        }
+                    }
+                }
+                Text("Drag the widget anywhere on screen; its position is remembered. Hover it for skip and more options, or right-click it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(!settings.displayMode.showsWidget)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var footer: String {
+        switch settings.displayMode {
+        case .menuBar:
+            return "A countdown in the menu bar. Click it for controls and today's count."
+        case .floating:
+            return "A small always-on-top card with the countdown and a progress bar. With the menu bar item off, open Pomodoro again from Spotlight or Launchpad to get back to Settings."
+        case .both:
+            return "Countdown in the menu bar and the floating widget on screen."
         }
     }
 }

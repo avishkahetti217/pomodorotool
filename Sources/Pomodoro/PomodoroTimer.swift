@@ -79,6 +79,14 @@ final class PomodoroTimer: ObservableObject {
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
+    var primaryActionTitle: String {
+        switch state {
+        case .idle: return phase.isBreak ? "Start Break" : "Start Focus"
+        case .running: return "Pause"
+        case .paused: return "Resume"
+        }
+    }
+
     var isBlockingActive: Bool {
         settings.blockingEnabled && state == .running && phase == .focus
     }

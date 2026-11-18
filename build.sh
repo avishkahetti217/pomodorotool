@@ -33,7 +33,7 @@ if [[ "${1:-}" == "--install" ]]; then
     DEST="/Applications"
     [ -w "$DEST" ] || DEST="$HOME/Applications"
     mkdir -p "$DEST"
-    pkill -x Pomodoro 2>/dev/null || true
+    pkill -x Pomodoro 2>/dev/null && while pgrep -x Pomodoro >/dev/null; do sleep 0.2; done || true
     rm -rf "$DEST/Pomodoro.app"
     cp -R "$APP" "$DEST/"
     echo "✓ Installed to $DEST/Pomodoro.app"

@@ -1,0 +1,341 @@
+import AppKit
+import Combine
+import SwiftUI
+
+enum ScreenCorner: String, CaseIterable, Identifiable {
+    case topLeft, topRight, bottomLeft, bottomRight
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .topLeft: return "Top Left"
+        case .topRight: return "Top Right"
+        case .bottomLeft: return "Bottom Left"
+        case .bottomRight: return "Bottom Right"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .topLeft: return "arrow.up.left"
+        case .topRight: return "arrow.up.right"
+        case .bottomLeft: return "arrow.down.left"
+        case .bottomRight: return "arrow.down.right"
+        }
+    }
+    var isLeft: Bool { self == .topLeft || self == .bottomLeft }
+    var isTop: Bool { self == .topLeft || self == .topRight }
+}
+
+/// Borderless, always-on-top panel that never steals focus from the app you're working in.
+final class WidgetPanel: NSPanel {
+    init(size: NSSize) {
+        super.init(contentRect: NSRect(origin: .zero, size: size),
+                   styleMask: [.borderless, .nonactivatingPanel],
+                   backing: .buffered, defer: false)
+        isFloatingPanel = true
+        level = .floating
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
+    }
+
+    override var canBecomeKey: Bool { true }
+}
+
+/// Lets the first click on the widget press a button even though the app isn't active.
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+@MainActor
+final class FloatingWidgetController {
+    private static let originKey = "widgetOrigin"
+    private static let margin: CGFloat = 16
+
+    private let settings: AppSettings
+    private let timer: PomodoroTimer
+    private var panel: WidgetPanel?
+    private var dragOffset: NSPoint?
+    private var cancellables = Set<AnyCancellable>()
+
+    init(settings: AppSettings, timer: PomodoroTimer) {
+        self.settings = settings
+        self.timer = timer
+    }
+
+    /// Call once the app has finished launching.
+    func start() {
+        settings.$displayMode
+            .removeDuplicates()
+            .sink { [weak self] mode in
+                MainActor.assumeIsolated { self?.setVisible(mode.showsWidget) }
+            }
+            .store(in: &cancellables)
+        settings.$widgetOpacity
+            .sink { [weak self] value in
+                MainActor.assumeIsolated { self?.panel?.alphaValue = value }
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.keepOnScreen() }
+            }
+            .store(in: &cancellables)
+    }
+
+    func move(to corner: ScreenCorner) {
+        guard let panel else { return }
+        place(panel, at: corner)
+        saveOrigin()
+    }
+
+    // MARK: Dragging (driven by a SwiftUI DragGesture so buttons keep working)
+
+    func dragChanged() {
+        guard let panel else { return }
+        let mouse = NSEvent.mouseLocation
+        if dragOffset == nil {
+            dragOffset = NSPoint(x: mouse.x - panel.frame.minX, y: mouse.y - panel.frame.minY)
+        }
+        guard let offset = dragOffset else { return }
+        panel.setFrameOrigin(NSPoint(x: mouse.x - offset.x, y: mouse.y - offset.y))
+    }
+
+    func dragEnded() {
+        dragOffset = nil
+        keepOnScreen()
+        saveOrigin()
+    }
+
+    // MARK: Internals
+
+    private func setVisible(_ visible: Bool) {
+        guard visible else {
+            panel?.orderOut(nil)
+            return
+        }
+        let panel = self.panel ?? makePanel()
+        panel.alphaValue = settings.widgetOpacity
+        panel.orderFrontRegardless()
+        panel.invalidateShadow()
+        keepOnScreen()
+    }
+
+    private func makePanel() -> WidgetPanel {
+        let root = FloatingWidgetView(controller: self)
+            .environmentObject(timer)
+            .environmentObject(settings)
+        let host = FirstMouseHostingView(rootView: root)
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+
+        let panel = WidgetPanel(size: size)
+        panel.contentView = host
+        self.panel = panel
+
+        if let saved = UserDefaults.standard.array(forKey: Self.originKey) as? [Double], saved.count == 2 {
+            panel.setFrameOrigin(NSPoint(x: saved[0], y: saved[1]))
+        } else {
+            place(panel, at: .topRight)
+        }
+        return panel
+    }
+
+    private func place(_ panel: NSWindow, at corner: ScreenCorner) {
+        guard let screen = panel.screen ?? NSScreen.main else { return }
+        let area = screen.visibleFrame
+        let size = panel.frame.size
+        let x = corner.isLeft ? area.minX + Self.margin : area.maxX - size.width - Self.margin
+        let y = corner.isTop ? area.maxY - size.height - Self.margin : area.minY + Self.margin
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    /// Pull the widget fully back onto the nearest screen (e.g. after unplugging a display).
+    private func keepOnScreen() {
+        guard let panel, panel.isVisible else { return }
+        let frame = panel.frame
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) ?? NSScreen.main else { return }
+        let area = screen.visibleFrame
+        let x = min(max(frame.minX, area.minX), area.maxX - frame.width)
+        let y = min(max(frame.minY, area.minY), area.maxY - frame.height)
+        if x != frame.minX || y != frame.minY {
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            saveOrigin()
+        }
+    }
+
+    private func saveOrigin() {
+        guard let origin = panel?.frame.origin else { return }
+        UserDefaults.standard.set([Double(origin.x), Double(origin.y)], forKey: Self.originKey)
+    }
+}
+
+// MARK: - Views
+
+struct FloatingWidgetView: View {
+    let controller: FloatingWidgetController
+    @EnvironmentObject private var timer: PomodoroTimer
+    @EnvironmentObject private var settings: AppSettings
+    @State private var hovering = false
+
+    private let corner: CGFloat = 16
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 5) {
+                        Image(systemName: timer.phase.symbol)
+                        Text(timer.phase.title.uppercased()).tracking(0.6)
+                        if timer.state == .paused {
+                            Text("· PAUSED").foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(timer.phase.color)
+
+                    Text(timer.timeString)
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 0)
+                controls
+            }
+
+            HStack(spacing: 10) {
+                progressBar
+                cycleDots
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: 270)
+        .background(VisualEffectBackground(cornerRadius: corner))
+        .overlay(RoundedRectangle(cornerRadius: corner).strokeBorder(Color.primary.opacity(0.1)))
+        .clipShape(RoundedRectangle(cornerRadius: corner))
+        .contentShape(RoundedRectangle(cornerRadius: corner))
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { _ in controller.dragChanged() }
+                .onEnded { _ in controller.dragEnded() }
+        )
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.15)) { hovering = inside }
+        }
+        .contextMenu { WidgetMenuItems(controller: controller) }
+        .help("Drag to move · right-click for options")
+    }
+
+    private var controls: some View {
+        HStack(spacing: 6) {
+            Group {
+                Button { timer.skip() } label: {
+                    Image(systemName: "forward.end.fill")
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(Color.primary.opacity(0.08)))
+                }
+                .help(timer.phase.isBreak ? "Skip break" : "Skip to break")
+
+                Menu {
+                    WidgetMenuItems(controller: controller)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(Color.primary.opacity(0.08)))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
+
+            Button { timer.toggle() } label: {
+                Image(systemName: timer.state == .running ? "pause.fill" : "play.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(timer.phase.color))
+            }
+            .help(timer.primaryActionTitle)
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .semibold))
+    }
+
+    private var progressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.1))
+                Capsule()
+                    .fill(timer.phase.color)
+                    .frame(width: geo.size.width * timer.progress)
+                    .animation(.linear(duration: 0.25), value: timer.progress)
+            }
+        }
+        .frame(height: 6)
+    }
+
+    private var cycleDots: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<settings.sessionsBeforeLongBreak, id: \.self) { i in
+                Circle()
+                    .fill(i < timer.completedInCycle ? Phase.focus.color : Color.primary.opacity(0.18))
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .help("\(timer.completedInCycle) of \(settings.sessionsBeforeLongBreak) sessions before a long break")
+    }
+}
+
+/// Shared by the right-click menu and the "…" button.
+struct WidgetMenuItems: View {
+    let controller: FloatingWidgetController
+    @EnvironmentObject private var timer: PomodoroTimer
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        Button(timer.primaryActionTitle) { timer.toggle() }
+        Button("Restart \(timer.phase.isBreak ? "Break" : "Session")") { timer.reset() }
+            .disabled(timer.state == .idle)
+        Button(timer.phase.isBreak ? "Skip Break" : "Skip to Break") { timer.skip() }
+        Button("Reset Cycle") { timer.resetCycle() }
+        Divider()
+        Menu("Move to Corner") {
+            ForEach(ScreenCorner.allCases) { corner in
+                Button(corner.label) { controller.move(to: corner) }
+            }
+        }
+        if settings.displayMode == .both {
+            Button("Hide Widget (keep menu bar)") { settings.displayMode = .menuBar }
+        } else {
+            Button("Also Show in Menu Bar") { settings.displayMode = .both }
+        }
+        Divider()
+        Button("Statistics…") { SettingsWindowController.shared.show(.stats) }
+        Button("Settings…") { SettingsWindowController.shared.show(.display) }
+        Divider()
+        Button("Quit Pomodoro") { NSApp.terminate(nil) }
+    }
+}
+
+struct VisualEffectBackground: NSViewRepresentable {
+    let cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.wantsLayer = true
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.masksToBounds = true
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}

@@ -104,7 +104,7 @@ struct MenuContentView: View {
             .disabled(timer.state == .idle)
 
             Button { timer.toggle() } label: {
-                Label(primaryTitle, systemImage: timer.state == .running ? "pause.fill" : "play.fill")
+                Label(timer.primaryActionTitle, systemImage: timer.state == .running ? "pause.fill" : "play.fill")
                     .frame(minWidth: 110)
             }
             .buttonStyle(.borderedProminent)
@@ -117,14 +117,6 @@ struct MenuContentView: View {
             .help(timer.phase.isBreak ? "Skip break" : "Skip to break (won't count as completed)")
         }
         .controlSize(.large)
-    }
-
-    private var primaryTitle: String {
-        switch timer.state {
-        case .idle: return timer.phase.isBreak ? "Start Break" : "Start Focus"
-        case .running: return "Pause"
-        case .paused: return "Resume"
-        }
     }
 
     private var todaySummary: some View {

@@ -9,6 +9,7 @@ final class AppState {
     let notifier: Notifier
     let blocker: AppBlocker
     let timer: PomodoroTimer
+    let widget: FloatingWidgetController
 
     private init() {
         settings = AppSettings()
@@ -16,6 +17,7 @@ final class AppState {
         notifier = Notifier()
         blocker = AppBlocker(settings: settings, notifier: notifier)
         timer = PomodoroTimer(settings: settings, stats: stats, notifier: notifier, blocker: blocker)
+        widget = FloatingWidgetController(settings: settings, timer: timer)
     }
 }
 
@@ -23,6 +25,14 @@ final class AppState {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppState.shared.notifier.setUp()
+        AppState.shared.widget.start()
+    }
+
+    /// Opening the app again (Spotlight, Launchpad, Finder) shows Settings, so it's always
+    /// reachable even when the menu bar item is turned off.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindowController.shared.show(.display)
+        return true
     }
 }
 
@@ -30,9 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct PomodoroApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let state = AppState.shared
+    @StateObject private var settings = AppState.shared.settings
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $settings.showsMenuBarItem) {
             MenuContentView()
                 .environmentObject(state.timer)
                 .environmentObject(state.settings)
