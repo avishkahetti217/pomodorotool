@@ -181,6 +181,10 @@ struct DisplaySettingsView: View {
             }
 
             Section("Floating widget") {
+                Picker("Size", selection: $settings.widgetSize) {
+                    ForEach(WidgetSize.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 LabeledContent("Opacity") {
                     HStack {
                         Slider(value: $settings.widgetOpacity, in: 0.4...1.0)

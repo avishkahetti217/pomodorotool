@@ -58,6 +58,7 @@ final class FloatingWidgetController {
     private let settings: AppSettings
     private let timer: PomodoroTimer
     private var panel: WidgetPanel?
+    private var host: NSView?
     private var dragOffset: NSPoint?
     private var cancellables = Set<AnyCancellable>()
 
@@ -77,6 +78,14 @@ final class FloatingWidgetController {
         settings.$widgetOpacity
             .sink { [weak self] value in
                 MainActor.assumeIsolated { self?.panel?.alphaValue = value }
+            }
+            .store(in: &cancellables)
+        settings.$widgetSize
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                // @Published fires before the value is stored; resize once SwiftUI has re-rendered.
+                DispatchQueue.main.async { self?.fitToContent() }
             }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -135,6 +144,7 @@ final class FloatingWidgetController {
         let panel = WidgetPanel(size: size)
         panel.contentView = host
         self.panel = panel
+        self.host = host
 
         if let saved = UserDefaults.standard.array(forKey: Self.originKey) as? [Double], saved.count == 2 {
             panel.setFrameOrigin(NSPoint(x: saved[0], y: saved[1]))
@@ -142,6 +152,19 @@ final class FloatingWidgetController {
             place(panel, at: .topRight)
         }
         return panel
+    }
+
+    /// Resize the panel to the SwiftUI content, keeping the top-left corner where the user put it.
+    private func fitToContent() {
+        guard let panel, let host else { return }
+        host.layoutSubtreeIfNeeded()
+        let size = host.fittingSize
+        let top = panel.frame.maxY
+        panel.setFrame(NSRect(x: panel.frame.minX, y: top - size.height, width: size.width, height: size.height),
+                       display: true)
+        panel.invalidateShadow()
+        keepOnScreen()
+        saveOrigin()
     }
 
     private func place(_ panel: NSWindow, at corner: ScreenCorner) {
@@ -176,48 +199,85 @@ final class FloatingWidgetController {
 
 // MARK: - Views
 
+/// Dimensions for each widget size.
+private struct WidgetMetrics {
+    let width: CGFloat
+    let timeFont: CGFloat
+    let labelFont: CGFloat
+    let playButton: CGFloat
+    let smallButton: CGFloat
+    let hPadding: CGFloat
+    let vPadding: CGFloat
+    let corner: CGFloat
+    let barHeight: CGFloat
+    let dot: CGFloat
+    let spacing: CGFloat
+    /// Mini puts the phase icon inline and drops the label row, hover buttons and dots.
+    let isMini: Bool
+
+    init(_ size: WidgetSize) {
+        switch size {
+        case .mini:
+            self.init(width: 140, timeFont: 18, labelFont: 11, playButton: 22, smallButton: 0,
+                      hPadding: 10, vPadding: 7, corner: 10, barHeight: 3, dot: 0, spacing: 5, isMini: true)
+        case .compact:
+            self.init(width: 196, timeFont: 24, labelFont: 9, playButton: 28, smallButton: 22,
+                      hPadding: 11, vPadding: 9, corner: 13, barHeight: 4, dot: 5, spacing: 6, isMini: false)
+        case .regular:
+            self.init(width: 270, timeFont: 34, labelFont: 10, playButton: 36, smallButton: 26,
+                      hPadding: 14, vPadding: 12, corner: 16, barHeight: 6, dot: 6, spacing: 9, isMini: false)
+        }
+    }
+
+    private init(width: CGFloat, timeFont: CGFloat, labelFont: CGFloat, playButton: CGFloat, smallButton: CGFloat,
+                 hPadding: CGFloat, vPadding: CGFloat, corner: CGFloat, barHeight: CGFloat, dot: CGFloat,
+                 spacing: CGFloat, isMini: Bool) {
+        self.width = width; self.timeFont = timeFont; self.labelFont = labelFont
+        self.playButton = playButton; self.smallButton = smallButton
+        self.hPadding = hPadding; self.vPadding = vPadding; self.corner = corner
+        self.barHeight = barHeight; self.dot = dot; self.spacing = spacing; self.isMini = isMini
+    }
+}
+
 struct FloatingWidgetView: View {
     let controller: FloatingWidgetController
     @EnvironmentObject private var timer: PomodoroTimer
     @EnvironmentObject private var settings: AppSettings
     @State private var hovering = false
 
-    private let corner: CGFloat = 16
+    private var m: WidgetMetrics { WidgetMetrics(settings.widgetSize) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 5) {
-                        Image(systemName: timer.phase.symbol)
-                        Text(timer.phase.title.uppercased()).tracking(0.6)
-                        if timer.state == .paused {
-                            Text("· PAUSED").foregroundStyle(.secondary)
-                        }
+        let shape = RoundedRectangle(cornerRadius: m.corner)
+        VStack(alignment: .leading, spacing: m.spacing) {
+            HStack(alignment: .center, spacing: m.isMini ? 6 : 8) {
+                if m.isMini {
+                    Image(systemName: timer.state == .paused ? "pause.circle.fill" : timer.phase.symbol)
+                        .font(.system(size: m.labelFont, weight: .bold))
+                        .foregroundStyle(timer.phase.color)
+                    timeText
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        phaseLabel
+                        timeText
                     }
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(timer.phase.color)
-
-                    Text(timer.timeString)
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
                 }
                 Spacer(minLength: 0)
                 controls
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 progressBar
-                cycleDots
+                if !m.isMini { cycleDots }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(width: 270)
-        .background(VisualEffectBackground(cornerRadius: corner))
-        .overlay(RoundedRectangle(cornerRadius: corner).strokeBorder(Color.primary.opacity(0.1)))
-        .clipShape(RoundedRectangle(cornerRadius: corner))
-        .contentShape(RoundedRectangle(cornerRadius: corner))
+        .padding(.horizontal, m.hPadding)
+        .padding(.vertical, m.vPadding)
+        .frame(width: m.width)
+        .background(VisualEffectBackground(cornerRadius: m.corner))
+        .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        .clipShape(shape)
+        .contentShape(shape)
         .gesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { _ in controller.dragChanged() }
@@ -227,44 +287,65 @@ struct FloatingWidgetView: View {
             withAnimation(.easeOut(duration: 0.15)) { hovering = inside }
         }
         .contextMenu { WidgetMenuItems(controller: controller) }
-        .help("Drag to move · right-click for options")
+        .help("\(timer.phase.title) · drag to move · right-click for options")
+    }
+
+    private var phaseLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: timer.phase.symbol)
+            Text(timer.phase.title.uppercased()).tracking(0.5)
+            if timer.state == .paused {
+                Text("· PAUSED").foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: m.labelFont, weight: .bold))
+        .foregroundStyle(timer.phase.color)
+        .lineLimit(1)
+    }
+
+    private var timeText: some View {
+        Text(timer.timeString)
+            .font(.system(size: m.timeFont, weight: .semibold, design: .rounded))
+            .monospacedDigit()
     }
 
     private var controls: some View {
-        HStack(spacing: 6) {
-            Group {
-                Button { timer.skip() } label: {
-                    Image(systemName: "forward.end.fill")
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Color.primary.opacity(0.08)))
-                }
-                .help(timer.phase.isBreak ? "Skip break" : "Skip to break")
+        HStack(spacing: 5) {
+            if !m.isMini {
+                Group {
+                    Button { timer.skip() } label: {
+                        Image(systemName: "forward.end.fill")
+                            .frame(width: m.smallButton, height: m.smallButton)
+                            .background(Circle().fill(Color.primary.opacity(0.08)))
+                    }
+                    .help(timer.phase.isBreak ? "Skip break" : "Skip to break")
 
-                Menu {
-                    WidgetMenuItems(controller: controller)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Color.primary.opacity(0.08)))
+                    Menu {
+                        WidgetMenuItems(controller: controller)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: m.smallButton, height: m.smallButton)
+                            .background(Circle().fill(Color.primary.opacity(0.08)))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                .opacity(hovering ? 1 : 0)
+                .allowsHitTesting(hovering)
             }
-            .opacity(hovering ? 1 : 0)
-            .allowsHitTesting(hovering)
 
             Button { timer.toggle() } label: {
                 Image(systemName: timer.state == .running ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: m.playButton * 0.4, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+                    .frame(width: m.playButton, height: m.playButton)
                     .background(Circle().fill(timer.phase.color))
             }
             .help(timer.primaryActionTitle)
         }
         .buttonStyle(.plain)
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: max(9, m.smallButton * 0.42), weight: .semibold))
     }
 
     private var progressBar: some View {
@@ -277,15 +358,15 @@ struct FloatingWidgetView: View {
                     .animation(.linear(duration: 0.25), value: timer.progress)
             }
         }
-        .frame(height: 6)
+        .frame(height: m.barHeight)
     }
 
     private var cycleDots: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             ForEach(0..<settings.sessionsBeforeLongBreak, id: \.self) { i in
                 Circle()
                     .fill(i < timer.completedInCycle ? Phase.focus.color : Color.primary.opacity(0.18))
-                    .frame(width: 6, height: 6)
+                    .frame(width: m.dot, height: m.dot)
             }
         }
         .help("\(timer.completedInCycle) of \(settings.sessionsBeforeLongBreak) sessions before a long break")

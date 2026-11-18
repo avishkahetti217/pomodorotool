@@ -36,6 +36,18 @@ enum DisplayMode: String, CaseIterable, Identifiable {
     var showsWidget: Bool { self != .menuBar }
 }
 
+enum WidgetSize: String, CaseIterable, Identifiable {
+    case mini, compact, regular
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .mini: return "Mini"
+        case .compact: return "Compact"
+        case .regular: return "Regular"
+        }
+    }
+}
+
 struct ListedApp: Codable, Hashable, Identifiable {
     var bundleID: String
     var name: String
@@ -63,10 +75,14 @@ final class AppSettings: ObservableObject {
         static let allowedApps = "allowedApps"
         static let displayMode = "displayMode"
         static let widgetOpacity = "widgetOpacity"
+        static let widgetSize = "widgetSize"
     }
 
     @Published var displayMode: DisplayMode {
         didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
+    }
+    @Published var widgetSize: WidgetSize {
+        didSet { defaults.set(widgetSize.rawValue, forKey: Key.widgetSize) }
     }
     @Published var widgetOpacity: Double {
         didSet { defaults.set(widgetOpacity, forKey: Key.widgetOpacity) }
@@ -153,9 +169,11 @@ final class AppSettings: ObservableObject {
             Key.blockAction: BlockAction.hide.rawValue,
             Key.displayMode: DisplayMode.menuBar.rawValue,
             Key.widgetOpacity: 1.0,
+            Key.widgetSize: WidgetSize.compact.rawValue,
         ])
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .menuBar
         widgetOpacity = defaults.double(forKey: Key.widgetOpacity)
+        widgetSize = WidgetSize(rawValue: defaults.string(forKey: Key.widgetSize) ?? "") ?? .compact
         focusMinutes = defaults.integer(forKey: Key.focus)
         shortBreakMinutes = defaults.integer(forKey: Key.shortBreak)
         longBreakMinutes = defaults.integer(forKey: Key.longBreak)
