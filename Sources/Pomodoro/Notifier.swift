@@ -28,17 +28,26 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    func announce(finished: Phase, next: Phase, nextMinutes: Int, autoStarted: Bool, todayCount: Int) {
+    func announce(finished: Phase, next: Phase, nextMinutes: Int, autoStarted: Bool, todayCount: Int,
+                  progress: String? = nil, tip: String? = nil) {
         let title: String
-        let body: String
+        var body: String
         switch finished {
         case .focus:
-            title = "Pomodoro complete 🍅"
+            title = next == .longBreak ? "Full cycle complete 🎉" : "Pomodoro complete 🍅"
             let breakKind = next == .longBreak ? "long break" : "short break"
             let countText = todayCount == 1 ? "1 pomodoro" : "\(todayCount) pomodoros"
-            body = autoStarted
-                ? "\(countText) today. Your \(nextMinutes)-minute \(breakKind) has started."
-                : "\(countText) today. Time for a \(nextMinutes)-minute \(breakKind)."
+            if next == .longBreak {
+                body = autoStarted
+                    ? "\(countText) today. Your \(nextMinutes)-minute long break has started."
+                    : "\(countText) today. Time for a \(nextMinutes)-minute long break."
+            } else {
+                let lead = progress.map { "\($0). " } ?? ""
+                body = autoStarted
+                    ? "\(lead)Your \(nextMinutes)-minute \(breakKind) has started."
+                    : "\(lead)Time for a \(nextMinutes)-minute \(breakKind)."
+            }
+            if let tip { body += "\nBreak idea: \(tip)." }
         case .shortBreak, .longBreak:
             title = "Break's over"
             body = autoStarted

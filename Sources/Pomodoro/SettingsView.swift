@@ -180,6 +180,31 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section {
+                HStack {
+                    Toggle("Celebrate completed focus sessions", isOn: $settings.celebrateSessions)
+                    Spacer()
+                    Button("Preview") {
+                        AppState.shared.celebration.show(Celebration(
+                            completedInCycle: 2,
+                            cycleLength: settings.sessionsBeforeLongBreak,
+                            todayCount: 5,
+                            isPersonalBest: true,
+                            nextPhase: .shortBreak,
+                            nextMinutes: settings.shortBreakMinutes,
+                            tip: settings.showBreakTips ? BreakIdeas.random(for: .shortBreak) : nil
+                        ))
+                    }
+                }
+                Toggle("Suggest screen-free break ideas", isOn: $settings.showBreakTips)
+            } header: {
+                Text("Motivation")
+            } footer: {
+                Text("A short reward card appears for a few seconds after each focus session, showing how close you are to a full cycle. Break ideas appear as a single line during breaks.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Floating widget") {
                 Picker("Size", selection: $settings.widgetSize) {
                     ForEach(WidgetSize.allCases) { Text($0.label).tag($0) }

@@ -21,6 +21,9 @@ struct MenuContentView: View {
             header
             dial
             cycleDots
+            if let tip = timer.visibleBreakTip {
+                breakIdea(tip)
+            }
             controls
             Divider()
             todaySummary
@@ -87,12 +90,36 @@ struct MenuContentView: View {
                         .frame(width: 9, height: 9)
                 }
             }
-            Text(timer.phase == .longBreak
-                 ? "Cycle complete"
-                 : "Session \(max(current, 1)) of \(total) · long break after \(total)")
+            Text(cycleCaption(current: max(current, 1), total: total))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func cycleCaption(current: Int, total: Int) -> String {
+        switch timer.phase {
+        case .longBreak:
+            return "Full cycle complete 🎉"
+        case .shortBreak:
+            let left = timer.sessionsLeftInCycle
+            return left == 1 ? "Just 1 more session to a full cycle" : "\(left) more sessions to a full cycle"
+        case .focus:
+            return "Session \(current) of \(total)"
+        }
+    }
+
+    private func breakIdea(_ tip: String) -> some View {
+        Label {
+            Text(tip)
+        } icon: {
+            Image(systemName: timer.phase == .longBreak ? "figure.walk" : "leaf.fill")
+                .foregroundStyle(timer.phase.color)
+        }
+        .font(.callout)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(timer.phase.color.opacity(0.1)))
     }
 
     private var controls: some View {

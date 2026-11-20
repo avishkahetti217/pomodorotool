@@ -69,6 +69,12 @@ final class StatsStore: ObservableObject {
         }
     }
 
+    /// Highest daily count on any day other than today.
+    var bestPreviousDay: Int {
+        let todayKey = Self.key(for: Date())
+        return days.filter { $0.key != todayKey }.map(\.value.pomodoros).max() ?? 0
+    }
+
     var totalPomodoros: Int {
         days.values.reduce(0) { $0 + $1.pomodoros }
     }

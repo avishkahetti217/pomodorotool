@@ -88,11 +88,25 @@ final class FloatingWidgetController {
                 DispatchQueue.main.async { self?.fitToContent() }
             }
             .store(in: &cancellables)
+        // The break-idea line changes the widget's height.
+        timer.$breakTip.map { _ in () }
+            .merge(with: settings.$showBreakTips.map { _ in () })
+            .dropFirst(2)
+            .sink { [weak self] in
+                DispatchQueue.main.async { self?.fitToContent() }
+            }
+            .store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.keepOnScreen() }
             }
             .store(in: &cancellables)
+    }
+
+    /// The widget's frame while it's on screen, used to place the reward card next to it.
+    var visibleFrame: NSRect? {
+        guard let panel, panel.isVisible else { return nil }
+        return panel.frame
     }
 
     func move(to corner: ScreenCorner) {
@@ -270,6 +284,19 @@ struct FloatingWidgetView: View {
                 progressBar
                 if !m.isMini { cycleDots }
             }
+
+            if !m.isMini, let tip = timer.visibleBreakTip {
+                Label {
+                    Text(tip)
+                } icon: {
+                    Image(systemName: timer.phase == .longBreak ? "figure.walk" : "leaf.fill")
+                        .foregroundStyle(timer.phase.color)
+                }
+                .font(.system(size: m.labelFont + 1))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, m.hPadding)
         .padding(.vertical, m.vPadding)
@@ -287,7 +314,16 @@ struct FloatingWidgetView: View {
             withAnimation(.easeOut(duration: 0.15)) { hovering = inside }
         }
         .contextMenu { WidgetMenuItems(controller: controller) }
-        .help("\(timer.phase.title) · drag to move · right-click for options")
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        var text = timer.phase.title
+        if let tip = timer.visibleBreakTip { text += ": \(tip)" }
+        else if timer.phase == .focus {
+            text += " · \(timer.sessionsLeftInCycle) left to a full cycle"
+        }
+        return text + "\nDrag to move · right-click for options"
     }
 
     private var phaseLabel: some View {

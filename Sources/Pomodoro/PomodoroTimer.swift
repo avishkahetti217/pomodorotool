@@ -36,6 +36,11 @@ final class PomodoroTimer: ObservableObject {
     @Published private(set) var completedInCycle = 0
     @Published private var now = Date()
     @Published private var pausedRemaining: TimeInterval = 0
+    /// A screen-free suggestion picked when a break begins; nil during focus.
+    @Published private(set) var breakTip: String?
+
+    /// Called after a focus session completes (used for the reward card).
+    var onFocusCompleted: ((Celebration) -> Void)?
 
     private var endDate: Date?
     private var ticker: Timer?
@@ -87,6 +92,15 @@ final class PomodoroTimer: ObservableObject {
         }
     }
 
+    var sessionsLeftInCycle: Int {
+        max(0, settings.sessionsBeforeLongBreak - completedInCycle)
+    }
+
+    /// The break idea to display, respecting the user's setting.
+    var visibleBreakTip: String? {
+        settings.showBreakTips && phase.isBreak ? breakTip : nil
+    }
+
     var isBlockingActive: Bool {
         settings.blockingEnabled && state == .running && phase == .focus
     }
@@ -136,6 +150,7 @@ final class PomodoroTimer: ObservableObject {
         reset()
         phase = .focus
         completedInCycle = 0
+        breakTip = nil
     }
 
     // MARK: - Internals
@@ -159,11 +174,31 @@ final class PomodoroTimer: ObservableObject {
         if finished == .focus || settings.soundAfterBreaks {
             SoundPlayer.play(settings.soundName)
         }
+        let nextMinutes = settings.minutes(for: phase)
+        let progress = finished == .focus
+            ? Encouragement.cycleProgress(left: sessionsLeftInCycle, nextPhase: phase, nextMinutes: nextMinutes)
+            : nil
         notifier.announce(finished: finished,
                           next: phase,
-                          nextMinutes: settings.minutes(for: phase),
+                          nextMinutes: nextMinutes,
                           autoStarted: state == .running,
-                          todayCount: stats.today.pomodoros)
+                          todayCount: stats.today.pomodoros,
+                          progress: progress,
+                          tip: visibleBreakTip)
+
+        if finished == .focus, settings.celebrateSessions {
+            let today = stats.today.pomodoros
+            let best = stats.bestPreviousDay
+            onFocusCompleted?(Celebration(
+                completedInCycle: completedInCycle,
+                cycleLength: settings.sessionsBeforeLongBreak,
+                todayCount: today,
+                isPersonalBest: best > 0 && today == best + 1,
+                nextPhase: phase,
+                nextMinutes: nextMinutes,
+                tip: visibleBreakTip
+            ))
+        }
     }
 
     private func advance(completed: Bool) {
@@ -177,6 +212,7 @@ final class PomodoroTimer: ObservableObject {
             completedInCycle = 0
             phase = .focus
         }
+        breakTip = BreakIdeas.random(for: phase)
         state = .idle
 
         let autoStart = phase.isBreak ? settings.autoStartBreaks : settings.autoStartFocus

@@ -10,6 +10,7 @@ final class AppState {
     let blocker: AppBlocker
     let timer: PomodoroTimer
     let widget: FloatingWidgetController
+    let celebration: CelebrationController
 
     private init() {
         settings = AppSettings()
@@ -18,6 +19,8 @@ final class AppState {
         blocker = AppBlocker(settings: settings, notifier: notifier)
         timer = PomodoroTimer(settings: settings, stats: stats, notifier: notifier, blocker: blocker)
         widget = FloatingWidgetController(settings: settings, timer: timer)
+        celebration = CelebrationController(widget: widget)
+        timer.onFocusCompleted = { [celebration] in celebration.show($0) }
     }
 }
 

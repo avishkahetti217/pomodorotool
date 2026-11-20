@@ -76,10 +76,18 @@ final class AppSettings: ObservableObject {
         static let displayMode = "displayMode"
         static let widgetOpacity = "widgetOpacity"
         static let widgetSize = "widgetSize"
+        static let celebrate = "celebrateSessions"
+        static let breakTips = "showBreakTips"
     }
 
     @Published var displayMode: DisplayMode {
         didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
+    }
+    @Published var celebrateSessions: Bool {
+        didSet { defaults.set(celebrateSessions, forKey: Key.celebrate) }
+    }
+    @Published var showBreakTips: Bool {
+        didSet { defaults.set(showBreakTips, forKey: Key.breakTips) }
     }
     @Published var widgetSize: WidgetSize {
         didSet { defaults.set(widgetSize.rawValue, forKey: Key.widgetSize) }
@@ -170,9 +178,13 @@ final class AppSettings: ObservableObject {
             Key.displayMode: DisplayMode.menuBar.rawValue,
             Key.widgetOpacity: 1.0,
             Key.widgetSize: WidgetSize.compact.rawValue,
+            Key.celebrate: true,
+            Key.breakTips: true,
         ])
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .menuBar
         widgetOpacity = defaults.double(forKey: Key.widgetOpacity)
+        celebrateSessions = defaults.bool(forKey: Key.celebrate)
+        showBreakTips = defaults.bool(forKey: Key.breakTips)
         widgetSize = WidgetSize(rawValue: defaults.string(forKey: Key.widgetSize) ?? "") ?? .compact
         focusMinutes = defaults.integer(forKey: Key.focus)
         shortBreakMinutes = defaults.integer(forKey: Key.shortBreak)
