@@ -13,6 +13,7 @@ final class AppState {
     let celebration: CelebrationController
     let away: AwayController
     let hotkeys: HotKeyManager
+    let alarm: AlarmController
 
     private init() {
         settings = AppSettings()
@@ -24,6 +25,7 @@ final class AppState {
         celebration = CelebrationController(widget: widget)
         away = AwayController(widget: widget, timer: timer)
         hotkeys = HotKeyManager(settings: settings, timer: timer, widget: widget)
+        alarm = AlarmController(widget: widget, timer: timer, settings: settings)
         timer.onFocusCompleted = { [celebration] in celebration.show($0) }
     }
 }

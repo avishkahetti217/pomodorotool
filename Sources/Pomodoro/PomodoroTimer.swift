@@ -46,6 +46,11 @@ final class PomodoroTimer: ObservableObject {
     /// A screen-free suggestion picked when a break begins; nil during focus.
     @Published private(set) var breakTip: String?
 
+    /// The current cycle must be completed: the end of each short break rings an alarm until focus resumes.
+    @Published private(set) var cycleCommitted = false
+    /// True while the "break's over" alarm is ringing.
+    @Published private(set) var alarmRinging = false
+
     /// Set when the user comes back after an auto-pause; cleared once they choose what to do.
     @Published private(set) var awayReport: AwayReport?
 
@@ -74,6 +79,15 @@ final class PomodoroTimer: ObservableObject {
         // Durations shown while idle come from settings, so redraw when they change.
         settings.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        cycleCommitted = settings.commitFullCycle
+        // Flipping the setting applies to the cycle in progress too.
+        settings.$commitFullCycle
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] on in
+                MainActor.assumeIsolated { on ? self?.commitToCycle() : self?.endCommitment() }
+            }
             .store(in: &cancellables)
         observeSleepAndLock()
     }
@@ -129,6 +143,7 @@ final class PomodoroTimer: ObservableObject {
 
     func start() {
         guard state != .running else { return }
+        alarmRinging = false
         clearAway()
         let length = state == .paused ? pausedRemaining : totalDuration
         now = Date()
@@ -149,6 +164,7 @@ final class PomodoroTimer: ObservableObject {
 
     /// Restart the current phase from its full duration.
     func reset() {
+        alarmRinging = false
         clearAway()
         stopTicker()
         endDate = nil
@@ -158,6 +174,7 @@ final class PomodoroTimer: ObservableObject {
 
     /// Move to the next phase without counting the current one as completed.
     func skip() {
+        alarmRinging = false
         clearAway()
         stopTicker()
         endDate = nil
@@ -170,6 +187,19 @@ final class PomodoroTimer: ObservableObject {
         phase = .focus
         completedInCycle = 0
         breakTip = nil
+        cycleCommitted = settings.commitFullCycle
+    }
+
+    // MARK: - Full-cycle commitment
+
+    func commitToCycle() {
+        cycleCommitted = true
+    }
+
+    /// Drop the commitment for this cycle (e.g. something urgent came up). Stops any alarm.
+    func endCommitment() {
+        cycleCommitted = false
+        alarmRinging = false
     }
 
     // MARK: - Away handling
@@ -288,6 +318,9 @@ final class PomodoroTimer: ObservableObject {
         }
         advance(completed: true)
 
+        if finished == .shortBreak, cycleCommitted, state != .running {
+            alarmRinging = true
+        }
         if finished == .focus || settings.soundAfterBreaks {
             SoundPlayer.play(settings.soundName)
         }
@@ -330,6 +363,7 @@ final class PomodoroTimer: ObservableObject {
         case .longBreak:
             completedInCycle = 0
             phase = .focus
+            cycleCommitted = settings.commitFullCycle
         }
         breakTip = BreakIdeas.random(for: phase)
         state = .idle

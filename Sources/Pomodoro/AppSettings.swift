@@ -66,6 +66,7 @@ final class AppSettings: ObservableObject {
         static let sessions = "sessionsBeforeLongBreak"
         static let autoBreaks = "autoStartBreaks"
         static let autoFocus = "autoStartFocus"
+        static let commitCycle = "commitFullCycle"
         static let sound = "soundName"
         static let soundAfterBreaks = "soundAfterBreaks"
         static let blockingEnabled = "blockingEnabled"
@@ -174,6 +175,10 @@ final class AppSettings: ObservableObject {
     @Published var autoStartFocus: Bool {
         didSet { defaults.set(autoStartFocus, forKey: Key.autoFocus) }
     }
+    /// Each new cycle starts "committed": when a short break ends, an alarm rings until the next session starts.
+    @Published var commitFullCycle: Bool {
+        didSet { defaults.set(commitFullCycle, forKey: Key.commitCycle) }
+    }
     @Published var soundName: String {
         didSet { defaults.set(soundName, forKey: Key.sound) }
     }
@@ -204,6 +209,7 @@ final class AppSettings: ObservableObject {
             Key.sessions: 4,
             Key.autoBreaks: false,
             Key.autoFocus: false,
+            Key.commitCycle: false,
             Key.sound: "Glass",
             Key.soundAfterBreaks: true,
             Key.blockingEnabled: false,
@@ -240,6 +246,7 @@ final class AppSettings: ObservableObject {
         sessionsBeforeLongBreak = defaults.integer(forKey: Key.sessions)
         autoStartBreaks = defaults.bool(forKey: Key.autoBreaks)
         autoStartFocus = defaults.bool(forKey: Key.autoFocus)
+        commitFullCycle = defaults.bool(forKey: Key.commitCycle)
         soundName = defaults.string(forKey: Key.sound) ?? "Glass"
         soundAfterBreaks = defaults.bool(forKey: Key.soundAfterBreaks)
         blockingEnabled = defaults.bool(forKey: Key.blockingEnabled)

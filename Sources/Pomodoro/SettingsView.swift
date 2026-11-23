@@ -131,6 +131,16 @@ struct TimerSettingsView: View {
                 Toggle("Start the next focus session automatically", isOn: $settings.autoStartFocus)
             }
 
+            Section {
+                Toggle("Commit to full cycles", isOn: $settings.commitFullCycle)
+            } header: {
+                Text("Full-cycle commitment")
+            } footer: {
+                Text("When a short break ends, an alarm keeps ringing and a reminder stays on screen until you start the next focus session. It rings every few seconds, then every 15 seconds after 2 minutes. Need to step away? Choose “End full cycle” on the reminder, popover or widget to drop it for the current cycle. It switches back on with the next cycle.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Sound") {
                 HStack {
                     Picker("End-of-session sound", selection: $settings.soundName) {

@@ -37,5 +37,6 @@ if [[ "${1:-}" == "--install" ]]; then
     rm -rf "$DEST/Pomodoro.app"
     cp -R "$APP" "$DEST/"
     echo "✓ Installed to $DEST/Pomodoro.app"
+    sleep 1
     open "$DEST/Pomodoro.app"
 fi

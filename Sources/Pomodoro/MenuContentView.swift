@@ -25,6 +25,7 @@ struct MenuContentView: View {
                 breakIdea(tip)
             }
             controls
+            commitmentRow
             Divider()
             todaySummary
             Divider()
@@ -120,6 +121,25 @@ struct MenuContentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 8).fill(timer.phase.color.opacity(0.1)))
+    }
+
+    private var commitmentRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: timer.cycleCommitted ? "lock.fill" : "lock.open")
+                .foregroundStyle(timer.cycleCommitted ? Phase.focus.color : .secondary)
+            Text(timer.cycleCommitted ? "Committed to this full cycle" : "Not committed to this cycle")
+                .foregroundStyle(timer.cycleCommitted ? .primary : .secondary)
+            Spacer()
+            if timer.cycleCommitted {
+                Button("End") { timer.endCommitment() }
+                    .help("Something came up? Drop the commitment for this cycle. No alarm after breaks.")
+            } else {
+                Button("Commit") { timer.commitToCycle() }
+                    .help("Ring an alarm at the end of each short break until you start the next session")
+            }
+        }
+        .font(.caption)
+        .buttonStyle(.borderless)
     }
 
     private func hint(_ action: HotKeyAction) -> String {

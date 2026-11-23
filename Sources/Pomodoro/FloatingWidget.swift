@@ -336,7 +336,12 @@ struct FloatingWidgetView: View {
     private var phaseLabel: some View {
         HStack(spacing: 4) {
             Image(systemName: timer.phase.symbol)
-            Text(timer.phase.title.uppercased()).tracking(0.5)
+            Text(timer.alarmRinging ? "BREAK'S OVER" : timer.phase.title.uppercased()).tracking(0.5)
+            if timer.cycleCommitted {
+                Image(systemName: "lock.fill")
+                    .imageScale(.small)
+                    .help("Committed to this full cycle")
+            }
             if timer.state == .paused {
                 Text("· PAUSED").foregroundStyle(.secondary)
             }
@@ -438,6 +443,11 @@ struct WidgetMenuItems: View {
             .disabled(timer.state == .idle)
         Button(timer.phase.isBreak ? "Skip Break" : "Skip to Break") { timer.skip() }
         Button("Reset Cycle") { timer.resetCycle() }
+        if timer.cycleCommitted {
+            Button("End Full-Cycle Commitment") { timer.endCommitment() }
+        } else {
+            Button("Commit to Full Cycle") { timer.commitToCycle() }
+        }
         Divider()
         Menu("Move to Corner") {
             ForEach(ScreenCorner.allCases) { corner in
