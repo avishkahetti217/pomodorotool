@@ -41,6 +41,12 @@ struct MenuContentView: View {
                 .font(.headline)
                 .foregroundStyle(timer.phase.color)
             Spacer()
+            if AppState.shared.focusMode.isOn {
+                Image(systemName: "moon.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("macOS Focus is on")
+            }
             if timer.isBlockingActive {
                 Label("Blocking", systemImage: "hand.raised.fill")
                     .font(.caption)

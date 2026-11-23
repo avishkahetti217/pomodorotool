@@ -60,7 +60,7 @@ struct SettingsView: View {
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
                 .tag(SettingsTab.shortcuts)
             BlockingSettingsView()
-                .tabItem { Label("Focus Blocking", systemImage: "hand.raised") }
+                .tabItem { Label("Focus", systemImage: "moon") }
                 .tag(SettingsTab.blocking)
             StatsView()
                 .tabItem { Label("Statistics", systemImage: "chart.bar") }
@@ -129,6 +129,30 @@ struct TimerSettingsView: View {
             Section("Automation") {
                 Toggle("Start breaks automatically", isOn: $settings.autoStartBreaks)
                 Toggle("Start the next focus session automatically", isOn: $settings.autoStartFocus)
+            }
+
+            Section {
+                Picker("Show break screen", selection: $settings.breakScreenMode) {
+                    ForEach(BreakScreenMode.allCases) { Text($0.label).tag($0) }
+                }
+                LabeledContent("Darkness") {
+                    HStack {
+                        Slider(value: $settings.breakScreenOpacity, in: 0.6...1.0)
+                            .frame(width: 160)
+                        Text("\(Int(settings.breakScreenOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+                .disabled(settings.breakScreenMode == .off)
+                Toggle("Show a “Skip break” button", isOn: $settings.breakScreenAllowSkip)
+                    .disabled(settings.breakScreenMode == .off)
+            } header: {
+                Text("Break screen")
+            } footer: {
+                Text("Darkens all displays during breaks and shows the break timer and a break idea, so you actually step away. It fades in a few seconds after focus ends, starts the break automatically, and disappears when the break is over. Your skip shortcut (⌃⌥S by default) always works.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -346,6 +370,8 @@ struct BlockingSettingsView: View {
 
     var body: some View {
         Form {
+            FocusModeSettingsSection()
+
             Section {
                 Toggle("Block distracting apps during focus sessions", isOn: $settings.blockingEnabled)
             } footer: {

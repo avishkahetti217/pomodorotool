@@ -368,7 +368,10 @@ final class PomodoroTimer: ObservableObject {
         breakTip = BreakIdeas.random(for: phase)
         state = .idle
 
-        let autoStart = phase.isBreak ? settings.autoStartBreaks : settings.autoStartFocus
+        // The break screen is itself the cue to stop, so its breaks start on their own.
+        let autoStart = phase.isBreak
+            ? settings.autoStartBreaks || settings.breakScreenMode.applies(to: phase)
+            : settings.autoStartFocus
         if completed && autoStart {
             start()
         } else {

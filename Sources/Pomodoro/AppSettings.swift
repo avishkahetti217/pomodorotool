@@ -48,6 +48,25 @@ enum WidgetSize: String, CaseIterable, Identifiable {
     }
 }
 
+enum BreakScreenMode: String, CaseIterable, Identifiable {
+    case off, allBreaks, longBreaksOnly
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .off: return "Off"
+        case .allBreaks: return "All breaks"
+        case .longBreaksOnly: return "Long breaks only"
+        }
+    }
+    func applies(to phase: Phase) -> Bool {
+        switch self {
+        case .off: return false
+        case .allBreaks: return phase.isBreak
+        case .longBreaksOnly: return phase == .longBreak
+        }
+    }
+}
+
 struct ListedApp: Codable, Hashable, Identifiable {
     var bundleID: String
     var name: String
@@ -67,6 +86,13 @@ final class AppSettings: ObservableObject {
         static let autoBreaks = "autoStartBreaks"
         static let autoFocus = "autoStartFocus"
         static let commitCycle = "commitFullCycle"
+        static let focusMode = "focusModeEnabled"
+        static let focusModeBreaks = "focusModeDuringBreaks"
+        static let focusOnShortcut = "focusOnShortcut"
+        static let focusOffShortcut = "focusOffShortcut"
+        static let breakScreen = "breakScreenMode"
+        static let breakScreenOpacity = "breakScreenOpacity"
+        static let breakScreenSkip = "breakScreenAllowSkip"
         static let sound = "soundName"
         static let soundAfterBreaks = "soundAfterBreaks"
         static let blockingEnabled = "blockingEnabled"
@@ -179,6 +205,29 @@ final class AppSettings: ObservableObject {
     @Published var commitFullCycle: Bool {
         didSet { defaults.set(commitFullCycle, forKey: Key.commitCycle) }
     }
+    /// Run Shortcuts to turn a macOS Focus on/off around focus sessions.
+    @Published var focusModeEnabled: Bool {
+        didSet { defaults.set(focusModeEnabled, forKey: Key.focusMode) }
+    }
+    @Published var focusModeDuringBreaks: Bool {
+        didSet { defaults.set(focusModeDuringBreaks, forKey: Key.focusModeBreaks) }
+    }
+    @Published var focusOnShortcut: String {
+        didSet { defaults.set(focusOnShortcut, forKey: Key.focusOnShortcut) }
+    }
+    @Published var focusOffShortcut: String {
+        didSet { defaults.set(focusOffShortcut, forKey: Key.focusOffShortcut) }
+    }
+
+    @Published var breakScreenMode: BreakScreenMode {
+        didSet { defaults.set(breakScreenMode.rawValue, forKey: Key.breakScreen) }
+    }
+    @Published var breakScreenOpacity: Double {
+        didSet { defaults.set(breakScreenOpacity, forKey: Key.breakScreenOpacity) }
+    }
+    @Published var breakScreenAllowSkip: Bool {
+        didSet { defaults.set(breakScreenAllowSkip, forKey: Key.breakScreenSkip) }
+    }
     @Published var soundName: String {
         didSet { defaults.set(soundName, forKey: Key.sound) }
     }
@@ -210,6 +259,13 @@ final class AppSettings: ObservableObject {
             Key.autoBreaks: false,
             Key.autoFocus: false,
             Key.commitCycle: false,
+            Key.focusMode: false,
+            Key.focusModeBreaks: false,
+            Key.focusOnShortcut: FocusModeController.defaultOnName,
+            Key.focusOffShortcut: FocusModeController.defaultOffName,
+            Key.breakScreen: BreakScreenMode.off.rawValue,
+            Key.breakScreenOpacity: 0.92,
+            Key.breakScreenSkip: true,
             Key.sound: "Glass",
             Key.soundAfterBreaks: true,
             Key.blockingEnabled: false,
@@ -247,6 +303,13 @@ final class AppSettings: ObservableObject {
         autoStartBreaks = defaults.bool(forKey: Key.autoBreaks)
         autoStartFocus = defaults.bool(forKey: Key.autoFocus)
         commitFullCycle = defaults.bool(forKey: Key.commitCycle)
+        focusModeEnabled = defaults.bool(forKey: Key.focusMode)
+        focusModeDuringBreaks = defaults.bool(forKey: Key.focusModeBreaks)
+        focusOnShortcut = defaults.string(forKey: Key.focusOnShortcut) ?? FocusModeController.defaultOnName
+        focusOffShortcut = defaults.string(forKey: Key.focusOffShortcut) ?? FocusModeController.defaultOffName
+        breakScreenMode = BreakScreenMode(rawValue: defaults.string(forKey: Key.breakScreen) ?? "") ?? .off
+        breakScreenOpacity = defaults.double(forKey: Key.breakScreenOpacity)
+        breakScreenAllowSkip = defaults.bool(forKey: Key.breakScreenSkip)
         soundName = defaults.string(forKey: Key.sound) ?? "Glass"
         soundAfterBreaks = defaults.bool(forKey: Key.soundAfterBreaks)
         blockingEnabled = defaults.bool(forKey: Key.blockingEnabled)

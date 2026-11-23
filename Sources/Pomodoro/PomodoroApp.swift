@@ -14,6 +14,8 @@ final class AppState {
     let away: AwayController
     let hotkeys: HotKeyManager
     let alarm: AlarmController
+    let breakScreen: BreakScreenController
+    let focusMode: FocusModeController
 
     private init() {
         settings = AppSettings()
@@ -26,6 +28,8 @@ final class AppState {
         away = AwayController(widget: widget, timer: timer)
         hotkeys = HotKeyManager(settings: settings, timer: timer, widget: widget)
         alarm = AlarmController(widget: widget, timer: timer, settings: settings)
+        breakScreen = BreakScreenController(timer: timer, settings: settings, stats: stats)
+        focusMode = FocusModeController(timer: timer, settings: settings)
         timer.onFocusCompleted = { [celebration] in celebration.show($0) }
     }
 }
@@ -36,6 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppState.shared.notifier.setUp()
         AppState.shared.widget.start()
         AppState.shared.hotkeys.start()
+        AppState.shared.breakScreen.start()
+        AppState.shared.focusMode.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppState.shared.focusMode.turnOffIfNeeded()
     }
 
     /// Opening the app again (Spotlight, Launchpad, Finder) shows Settings, so it's always
