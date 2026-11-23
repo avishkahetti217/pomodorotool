@@ -29,12 +29,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func announce(finished: Phase, next: Phase, nextMinutes: Int, autoStarted: Bool, todayCount: Int,
-                  progress: String? = nil, tip: String? = nil) {
+                  progress: String? = nil, tip: String? = nil, goalReached: Bool = false) {
         let title: String
         var body: String
         switch finished {
         case .focus:
-            title = next == .longBreak ? "Full cycle complete 🎉" : "Pomodoro complete 🍅"
+            title = goalReached ? "Daily goal reached 🏆"
+                : next == .longBreak ? "Full cycle complete 🎉" : "Pomodoro complete 🍅"
             let breakKind = next == .longBreak ? "long break" : "short break"
             let countText = todayCount == 1 ? "1 pomodoro" : "\(todayCount) pomodoros"
             if next == .longBreak {

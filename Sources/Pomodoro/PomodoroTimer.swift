@@ -24,6 +24,13 @@ enum Phase: String {
     }
 }
 
+/// Describes a focus session that was auto-paused because the user stepped away.
+struct AwayReport: Equatable {
+    let since: Date
+    let returnedAt: Date
+    var duration: TimeInterval { returnedAt.timeIntervalSince(since) }
+}
+
 /// The Pomodoro state machine: focus → short break → … → long break after N focus sessions.
 /// Time is tracked against an absolute end date, so it stays accurate across sleep and app-nap.
 @MainActor
@@ -39,8 +46,16 @@ final class PomodoroTimer: ObservableObject {
     /// A screen-free suggestion picked when a break begins; nil during focus.
     @Published private(set) var breakTip: String?
 
+    /// Set when the user comes back after an auto-pause; cleared once they choose what to do.
+    @Published private(set) var awayReport: AwayReport?
+
     /// Called after a focus session completes (used for the reward card).
     var onFocusCompleted: ((Celebration) -> Void)?
+
+    private var awaySince: Date?
+    private var returnWatch: Timer?
+    private var screenLocked = false
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
 
     private var endDate: Date?
     private var ticker: Timer?
@@ -60,6 +75,7 @@ final class PomodoroTimer: ObservableObject {
         settings.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        observeSleepAndLock()
     }
 
     // MARK: - Derived values
@@ -113,6 +129,7 @@ final class PomodoroTimer: ObservableObject {
 
     func start() {
         guard state != .running else { return }
+        clearAway()
         let length = state == .paused ? pausedRemaining : totalDuration
         now = Date()
         endDate = now.addingTimeInterval(length)
@@ -132,6 +149,7 @@ final class PomodoroTimer: ObservableObject {
 
     /// Restart the current phase from its full duration.
     func reset() {
+        clearAway()
         stopTicker()
         endDate = nil
         state = .idle
@@ -140,6 +158,7 @@ final class PomodoroTimer: ObservableObject {
 
     /// Move to the next phase without counting the current one as completed.
     func skip() {
+        clearAway()
         stopTicker()
         endDate = nil
         advance(completed: false)
@@ -153,10 +172,108 @@ final class PomodoroTimer: ObservableObject {
         breakTip = nil
     }
 
+    // MARK: - Away handling
+
+    /// Resume from where the user left; the time away is not counted.
+    func resumeIgnoringAway() {
+        start()
+    }
+
+    /// Treat the time away as focus time (e.g. thinking on a whiteboard or a work call).
+    func resumeCountingAway() {
+        guard let report = awayReport else { return start() }
+        let left = pausedRemaining - report.duration
+        clearAway()
+        if left <= 0 {
+            finish()
+        } else {
+            pausedRemaining = left
+            start()
+        }
+    }
+
+    /// Keep the session paused and just dismiss the prompt.
+    func dismissAway() {
+        clearAway()
+    }
+
+    private func clearAway() {
+        awaySince = nil
+        awayReport = nil
+        returnWatch?.invalidate()
+        returnWatch = nil
+    }
+
+    /// Pause a running focus session as of the moment the user left.
+    private func pauseForAway(since start: Date) {
+        guard settings.idlePauseEnabled, phase == .focus, state == .running, let end = endDate else { return }
+        pausedRemaining = min(totalDuration, max(0, end.timeIntervalSince(start)))
+        endDate = nil
+        state = .paused
+        stopTicker()
+        syncBlocker()
+        awaySince = start
+        awayReport = nil
+        watchForReturn()
+    }
+
+    private func watchForReturn() {
+        returnWatch?.invalidate()
+        let watch = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let since = self.awaySince else { return }
+                guard !self.screenLocked, Self.systemIdleSeconds() < 3 else { return }
+                self.returnWatch?.invalidate()
+                self.returnWatch = nil
+                self.awayReport = AwayReport(since: since, returnedAt: Date())
+            }
+        }
+        RunLoop.main.add(watch, forMode: .common)
+        returnWatch = watch
+    }
+
+    /// Seconds since the last keyboard/mouse/trackpad input. Needs no special permission.
+    static func systemIdleSeconds() -> TimeInterval {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    }
+
+    private func observeSleepAndLock() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        let leave: (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.pauseForAway(since: Date()) }
+        }
+        for name in [NSWorkspace.willSleepNotification,
+                     NSWorkspace.screensDidSleepNotification,
+                     NSWorkspace.sessionDidResignActiveNotification] {
+            observers.append((workspace, workspace.addObserver(forName: name, object: nil, queue: .main, using: leave)))
+        }
+        observers.append((distributed, distributed.addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
+        ) { [weak self] note in
+            MainActor.assumeIsolated {
+                self?.screenLocked = true
+                self?.pauseForAway(since: Date())
+            }
+        }))
+        observers.append((distributed, distributed.addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.screenLocked = false }
+        }))
+    }
+
     // MARK: - Internals
 
     private func tick() {
         now = Date()
+        if phase == .focus, settings.idlePauseEnabled {
+            let idle = Self.systemIdleSeconds()
+            if idle >= TimeInterval(settings.idleMinutes * 60) {
+                pauseForAway(since: now.addingTimeInterval(-idle))
+                return
+            }
+        }
         if let end = endDate, now >= end {
             finish()
         }
@@ -184,7 +301,8 @@ final class PomodoroTimer: ObservableObject {
                           autoStarted: state == .running,
                           todayCount: stats.today.pomodoros,
                           progress: progress,
-                          tip: visibleBreakTip)
+                          tip: visibleBreakTip,
+                          goalReached: finished == .focus && settings.activeDailyGoal == stats.today.pomodoros)
 
         if finished == .focus, settings.celebrateSessions {
             let today = stats.today.pomodoros
@@ -196,7 +314,8 @@ final class PomodoroTimer: ObservableObject {
                 isPersonalBest: best > 0 && today == best + 1,
                 nextPhase: phase,
                 nextMinutes: nextMinutes,
-                tip: visibleBreakTip
+                tip: visibleBreakTip,
+                dailyGoal: settings.activeDailyGoal
             ))
         }
     }

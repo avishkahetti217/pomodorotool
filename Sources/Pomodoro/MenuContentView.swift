@@ -122,12 +122,16 @@ struct MenuContentView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(timer.phase.color.opacity(0.1)))
     }
 
+    private func hint(_ action: HotKeyAction) -> String {
+        settings.shortcuts[action.rawValue].map { "  (\($0.display))" } ?? ""
+    }
+
     private var controls: some View {
         HStack(spacing: 10) {
             Button { timer.reset() } label: {
                 Image(systemName: "arrow.counterclockwise").frame(width: 22)
             }
-            .help("Restart this \(timer.phase.isBreak ? "break" : "session")")
+            .help("Restart this \(timer.phase.isBreak ? "break" : "session")" + hint(.restart))
             .disabled(timer.state == .idle)
 
             Button { timer.toggle() } label: {
@@ -137,18 +141,20 @@ struct MenuContentView: View {
             .buttonStyle(.borderedProminent)
             .tint(timer.phase.color)
             .keyboardShortcut(.space, modifiers: [])
+            .help(timer.primaryActionTitle + hint(.toggle))
 
             Button { timer.skip() } label: {
                 Image(systemName: "forward.end.fill").frame(width: 22)
             }
-            .help(timer.phase.isBreak ? "Skip break" : "Skip to break (won't count as completed)")
+            .help((timer.phase.isBreak ? "Skip break" : "Skip to break (won't count as completed)") + hint(.skip))
         }
         .controlSize(.large)
     }
 
     private var todaySummary: some View {
         let today = stats.today
-        return HStack {
+        return VStack(spacing: 8) {
+        HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Today").font(.caption).foregroundStyle(.secondary)
                 Text("\(today.pomodoros) \(today.pomodoros == 1 ? "pomodoro" : "pomodoros")")
@@ -159,6 +165,30 @@ struct MenuContentView: View {
                 Text("Focused").font(.caption).foregroundStyle(.secondary)
                 Text(formatMinutes(today.focusSeconds)).font(.title3.weight(.semibold))
             }
+        }
+            if let goal = settings.activeDailyGoal {
+                goalProgress(count: today.pomodoros, goal: goal)
+            }
+        }
+    }
+
+    private func goalProgress(count: Int, goal: Int) -> some View {
+        let fraction = min(1, Double(count) / Double(goal))
+        let met = count >= goal
+        return VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.18))
+                    Capsule()
+                        .fill(met ? Color.orange : Phase.focus.color)
+                        .frame(width: geo.size.width * fraction)
+                }
+            }
+            .frame(height: 6)
+            Text(met ? "Daily goal reached 🏆" + (count > goal ? " · \(count - goal) bonus" : "")
+                     : "\(goal - count) more to your daily goal of \(goal)")
+                .font(.caption)
+                .foregroundStyle(met ? Color.orange : Color.secondary)
         }
     }
 

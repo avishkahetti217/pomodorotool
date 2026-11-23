@@ -77,12 +77,46 @@ final class AppSettings: ObservableObject {
         static let widgetOpacity = "widgetOpacity"
         static let widgetSize = "widgetSize"
         static let celebrate = "celebrateSessions"
+        static let shortcuts = "globalShortcuts"
+        static let goalEnabled = "dailyGoalEnabled"
+        static let goal = "dailyGoal"
+        static let idlePause = "idlePauseEnabled"
+        static let idleMinutes = "idleMinutes"
         static let breakTips = "showBreakTips"
     }
 
     @Published var displayMode: DisplayMode {
         didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
     }
+    @Published var dailyGoalEnabled: Bool {
+        didSet { defaults.set(dailyGoalEnabled, forKey: Key.goalEnabled) }
+    }
+    @Published var dailyGoal: Int {
+        didSet {
+            let c = dailyGoal.clamped(1...24)
+            if c != dailyGoal { dailyGoal = c; return }
+            defaults.set(dailyGoal, forKey: Key.goal)
+        }
+    }
+    /// The goal when enabled, otherwise nil.
+    var activeDailyGoal: Int? { dailyGoalEnabled ? dailyGoal : nil }
+
+    @Published var idlePauseEnabled: Bool {
+        didSet { defaults.set(idlePauseEnabled, forKey: Key.idlePause) }
+    }
+    @Published var idleMinutes: Int {
+        didSet {
+            let c = idleMinutes.clamped(1...30)
+            if c != idleMinutes { idleMinutes = c; return }
+            defaults.set(idleMinutes, forKey: Key.idleMinutes)
+        }
+    }
+
+    /// Global shortcuts keyed by HotKeyAction raw value; a missing entry means "not set".
+    @Published var shortcuts: [String: Shortcut] {
+        didSet { defaults.set(try? JSONEncoder().encode(shortcuts), forKey: Key.shortcuts) }
+    }
+
     @Published var celebrateSessions: Bool {
         didSet { defaults.set(celebrateSessions, forKey: Key.celebrate) }
     }
@@ -179,11 +213,25 @@ final class AppSettings: ObservableObject {
             Key.widgetOpacity: 1.0,
             Key.widgetSize: WidgetSize.compact.rawValue,
             Key.celebrate: true,
+            Key.goalEnabled: true,
+            Key.goal: 8,
+            Key.idlePause: true,
+            Key.idleMinutes: 5,
             Key.breakTips: true,
         ])
         displayMode = DisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .menuBar
         widgetOpacity = defaults.double(forKey: Key.widgetOpacity)
         celebrateSessions = defaults.bool(forKey: Key.celebrate)
+        if let data = defaults.data(forKey: Key.shortcuts),
+           let saved = try? JSONDecoder().decode([String: Shortcut].self, from: data) {
+            shortcuts = saved
+        } else {
+            shortcuts = Shortcut.defaults
+        }
+        dailyGoalEnabled = defaults.bool(forKey: Key.goalEnabled)
+        dailyGoal = defaults.integer(forKey: Key.goal)
+        idlePauseEnabled = defaults.bool(forKey: Key.idlePause)
+        idleMinutes = defaults.integer(forKey: Key.idleMinutes)
         showBreakTips = defaults.bool(forKey: Key.breakTips)
         widgetSize = WidgetSize(rawValue: defaults.string(forKey: Key.widgetSize) ?? "") ?? .compact
         focusMinutes = defaults.integer(forKey: Key.focus)

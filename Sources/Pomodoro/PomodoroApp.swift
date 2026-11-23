@@ -11,6 +11,8 @@ final class AppState {
     let timer: PomodoroTimer
     let widget: FloatingWidgetController
     let celebration: CelebrationController
+    let away: AwayController
+    let hotkeys: HotKeyManager
 
     private init() {
         settings = AppSettings()
@@ -20,6 +22,8 @@ final class AppState {
         timer = PomodoroTimer(settings: settings, stats: stats, notifier: notifier, blocker: blocker)
         widget = FloatingWidgetController(settings: settings, timer: timer)
         celebration = CelebrationController(widget: widget)
+        away = AwayController(widget: widget, timer: timer)
+        hotkeys = HotKeyManager(settings: settings, timer: timer, widget: widget)
         timer.onFocusCompleted = { [celebration] in celebration.show($0) }
     }
 }
@@ -29,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppState.shared.notifier.setUp()
         AppState.shared.widget.start()
+        AppState.shared.hotkeys.start()
     }
 
     /// Opening the app again (Spotlight, Launchpad, Finder) shows Settings, so it's always

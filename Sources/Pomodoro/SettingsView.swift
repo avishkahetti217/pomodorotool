@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum SettingsTab: Hashable { case timer, display, blocking, stats }
+enum SettingsTab: Hashable { case timer, display, shortcuts, blocking, stats }
 
 /// Owns the settings window. A plain NSWindow is used because SwiftUI's `Settings`
 /// scene doesn't reliably come to the front in menu-bar-only apps.
@@ -56,6 +56,9 @@ struct SettingsView: View {
             DisplaySettingsView()
                 .tabItem { Label("Display", systemImage: "macwindow") }
                 .tag(SettingsTab.display)
+            ShortcutSettingsView()
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+                .tag(SettingsTab.shortcuts)
             BlockingSettingsView()
                 .tabItem { Label("Focus Blocking", systemImage: "hand.raised") }
                 .tag(SettingsTab.blocking)
@@ -87,6 +90,40 @@ struct TimerSettingsView: View {
                         Stepper("", value: $settings.sessionsBeforeLongBreak, in: 2...12).labelsHidden()
                     }
                 }
+            }
+
+            Section {
+                Toggle("Set a daily goal", isOn: $settings.dailyGoalEnabled)
+                LabeledContent("Pomodoros per day") {
+                    HStack {
+                        Text("\(settings.dailyGoal)").monospacedDigit()
+                        Stepper("", value: $settings.dailyGoal, in: 1...24).labelsHidden()
+                    }
+                }
+                .disabled(!settings.dailyGoalEnabled)
+            } header: {
+                Text("Daily goal")
+            } footer: {
+                Text("\(settings.dailyGoal) sessions ≈ \(formatMinutes(Double(settings.dailyGoal * settings.focusMinutes * 60))) of focus. Progress shows in the popover and widget, with a bigger celebration when you hit it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Pause focus sessions when I'm away", isOn: $settings.idlePauseEnabled)
+                LabeledContent("After no activity for") {
+                    HStack {
+                        Text("\(settings.idleMinutes) min").monospacedDigit()
+                        Stepper("", value: $settings.idleMinutes, in: 1...30).labelsHidden()
+                    }
+                }
+                .disabled(!settings.idlePauseEnabled)
+            } header: {
+                Text("Away detection")
+            } footer: {
+                Text("Also pauses when you lock the screen or the Mac sleeps. When you're back, choose to resume, count the time away as focus, or restart. Watching a video or reading without touching the keyboard can trigger it, so pick a duration that suits you.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Automation") {
@@ -192,7 +229,8 @@ struct DisplaySettingsView: View {
                             isPersonalBest: true,
                             nextPhase: .shortBreak,
                             nextMinutes: settings.shortBreakMinutes,
-                            tip: settings.showBreakTips ? BreakIdeas.random(for: .shortBreak) : nil
+                            tip: settings.showBreakTips ? BreakIdeas.random(for: .shortBreak) : nil,
+                            dailyGoal: settings.activeDailyGoal
                         ))
                     }
                 }
@@ -249,6 +287,41 @@ struct DisplaySettingsView: View {
         case .both:
             return "Countdown in the menu bar and the floating widget on screen."
         }
+    }
+}
+
+// MARK: - Shortcuts
+
+struct ShortcutSettingsView: View {
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(HotKeyAction.allCases) { action in
+                    LabeledContent(action.label) {
+                        ShortcutRecorder(action: action)
+                    }
+                }
+            } header: {
+                Text("Global keyboard shortcuts")
+            } footer: {
+                Text("These work from any app, with no extra permissions. Click a shortcut, then press a new combination that includes ⌘, ⌥ or ⌃. Esc cancels, ⌫ removes it. A ⚠︎ means another app already uses that combination.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button("Restore Defaults") {
+                    settings.shortcuts = Shortcut.defaults
+                }
+            } footer: {
+                Text("Defaults: ⌃⌥P start/pause, ⌃⌥S skip, ⌃⌥R restart. When the floating widget is hidden, a small card briefly confirms what a shortcut did.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -377,6 +450,7 @@ struct AppIcon: View {
 
 struct StatsView: View {
     @EnvironmentObject private var stats: StatsStore
+    @EnvironmentObject private var settings: AppSettings
     @State private var confirmReset = false
 
     var body: some View {
@@ -387,7 +461,7 @@ struct StatsView: View {
             HStack(spacing: 12) {
                 StatTile(title: "Today", value: "\(stats.today.pomodoros)", caption: "pomodoros")
                 StatTile(title: "Focused today", value: formatMinutes(stats.today.focusSeconds), caption: "of focus time")
-                StatTile(title: "Last 7 days", value: "\(week)", caption: "pomodoros")
+                StatTile(title: "Last 7 days", value: "\(week)", caption: goalCaption(history))
                 StatTile(title: "Streak", value: "\(stats.currentStreak)", caption: stats.currentStreak == 1 ? "day" : "days")
             }
 
@@ -399,6 +473,15 @@ struct StatsView: View {
                 )
                 .foregroundStyle(Phase.focus.color.gradient)
                 .cornerRadius(4)
+
+                if let goal = settings.activeDailyGoal {
+                    RuleMark(y: .value("Goal", goal))
+                        .foregroundStyle(Color.orange)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text("Goal \(goal)").font(.caption2).foregroundStyle(.orange)
+                        }
+                }
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: 2)) { _ in
@@ -425,6 +508,14 @@ struct StatsView: View {
         } message: {
             Text("This clears today's pomodoros and focus time. Other days are kept.")
         }
+    }
+}
+
+extension StatsView {
+    func goalCaption(_ history: [DayEntry]) -> String {
+        guard let goal = settings.activeDailyGoal else { return "pomodoros" }
+        let met = history.suffix(7).filter { $0.stats.pomodoros >= goal }.count
+        return "goal met \(met) of 7 days"
     }
 }
 

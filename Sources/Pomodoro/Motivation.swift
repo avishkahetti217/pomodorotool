@@ -51,10 +51,23 @@ struct Celebration {
     let nextPhase: Phase
     let nextMinutes: Int
     let tip: String?
+    var dailyGoal: Int? = nil
 
     var isCycleComplete: Bool { nextPhase == .longBreak }
 
+    /// True only on the session that reaches the goal, so the big celebration happens once a day.
+    var isGoalReached: Bool { dailyGoal.map { todayCount == $0 } ?? false }
+
+    var emoji: String { isGoalReached ? "🏆" : isCycleComplete ? "🎉" : "🍅" }
+
+    var todayText: String {
+        guard let goal = dailyGoal else { return "\(todayCount) today" }
+        if todayCount > goal { return "\(todayCount) today · \(todayCount - goal) past your goal" }
+        return "\(todayCount) of \(goal) today"
+    }
+
     var headline: String {
+        if isGoalReached { return "Daily goal reached!" }
         if isCycleComplete { return "Full cycle complete!" }
         return ["Session complete!", "Nice focus!", "Well done!", "One more in the bag!"].randomElement()!
     }

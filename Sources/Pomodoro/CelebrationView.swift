@@ -1,31 +1,26 @@
 import AppKit
 import SwiftUI
 
-/// Shows a brief, self-dismissing reward card after a focus session.
-/// It never takes keyboard focus; click to dismiss, hover to keep it open.
+/// Shows a small floating card next to the widget (or top-center when the widget is hidden).
+/// Cards never take keyboard focus. Optionally auto-dismiss; hovering pauses the countdown.
 @MainActor
-final class CelebrationController {
-    private static let displaySeconds: TimeInterval = 6
-
+final class CardPresenter {
     private let widget: FloatingWidgetController
     private var panel: WidgetPanel?
     private var dismissWork: DispatchWorkItem?
+    private var autoDismiss: TimeInterval?
 
     init(widget: FloatingWidgetController) {
         self.widget = widget
     }
 
-    func show(_ celebration: Celebration) {
-        closeImmediately()
+    var isShowing: Bool { panel != nil }
 
-        let view = CelebrationView(
-            celebration: celebration,
-            onHover: { [weak self] inside in
-                if inside { self?.dismissWork?.cancel() } else { self?.scheduleDismiss(after: 2) }
-            },
-            onClose: { [weak self] in self?.dismiss() }
-        )
-        let host = FirstMouseHostingView(rootView: view)
+    func show<Content: View>(_ content: Content, autoDismissAfter seconds: TimeInterval? = nil) {
+        closeImmediately()
+        autoDismiss = seconds
+
+        let host = FirstMouseHostingView(rootView: content)
         let size = host.fittingSize
         host.frame = NSRect(origin: .zero, size: size)
 
@@ -41,7 +36,25 @@ final class CelebrationController {
             ctx.duration = 0.2
             panel.animator().alphaValue = 1
         }
-        scheduleDismiss(after: Self.displaySeconds)
+        if let seconds { scheduleDismiss(after: seconds) }
+    }
+
+    /// Hovering keeps an auto-dismissing card open; leaving gives a short grace period.
+    func hoverChanged(_ inside: Bool) {
+        guard autoDismiss != nil else { return }
+        if inside { dismissWork?.cancel() } else { scheduleDismiss(after: 2) }
+    }
+
+    func dismiss() {
+        dismissWork?.cancel()
+        guard let panel else { return }
+        self.panel = nil
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+        })
     }
 
     private func scheduleDismiss(after seconds: TimeInterval) {
@@ -51,25 +64,12 @@ final class CelebrationController {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
-    private func dismiss() {
-        dismissWork?.cancel()
-        guard let panel else { return }
-        self.panel = nil
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.35
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            panel.orderOut(nil)
-        })
-    }
-
     private func closeImmediately() {
         dismissWork?.cancel()
         panel?.orderOut(nil)
         panel = nil
     }
 
-    /// Next to the floating widget if it's showing, otherwise top-center (clear of notification banners).
     private func origin(for size: NSSize) -> NSPoint {
         let gap: CGFloat = 8
         if let anchor = widget.visibleFrame,
@@ -82,6 +82,25 @@ final class CelebrationController {
         }
         let area = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
         return NSPoint(x: area.midX - size.width / 2, y: area.maxY - size.height - 12)
+    }
+}
+
+/// Shows the reward card after a focus session.
+@MainActor
+final class CelebrationController {
+    private let cards: CardPresenter
+
+    init(widget: FloatingWidgetController) {
+        cards = CardPresenter(widget: widget)
+    }
+
+    func show(_ celebration: Celebration) {
+        let view = CelebrationView(
+            celebration: celebration,
+            onHover: { [weak cards] in cards?.hoverChanged($0) },
+            onClose: { [weak cards] in cards?.dismiss() }
+        )
+        cards.show(view, autoDismissAfter: celebration.isGoalReached ? 9 : 6)
     }
 }
 
@@ -98,8 +117,8 @@ struct CelebrationView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 ZStack {
-                    ConfettiBurst(active: appeared)
-                    Text(celebration.isCycleComplete ? "🎉" : "🍅")
+                    ConfettiBurst(active: appeared, big: celebration.isGoalReached)
+                    Text(celebration.emoji)
                         .font(.system(size: 30))
                         .scaleEffect(appeared ? 1 : 0.3)
                         .rotationEffect(.degrees(appeared ? 0 : -30))
@@ -117,7 +136,7 @@ struct CelebrationView: View {
             }
 
             HStack(spacing: 4) {
-                Text("\(celebration.todayCount) today")
+                Text(celebration.todayText)
                 if celebration.isPersonalBest {
                     Text("· New personal best! 🏆").foregroundStyle(.orange)
                 }
@@ -169,14 +188,15 @@ struct CelebrationView: View {
 /// A small one-shot burst of dots radiating from the center.
 struct ConfettiBurst: View {
     let active: Bool
-    private let count = 14
+    var big = false
+    private var count: Int { big ? 24 : 14 }
     private let colors: [Color] = [Phase.focus.color, .orange, .yellow, Phase.shortBreak.color, Phase.longBreak.color]
 
     var body: some View {
         ZStack {
             ForEach(0..<count, id: \.self) { i in
                 let angle = Double(i) / Double(count) * 2 * .pi
-                let distance: CGFloat = i.isMultiple(of: 2) ? 30 : 22
+                let distance: CGFloat = (i.isMultiple(of: 2) ? 30 : 22) * (big ? 1.4 : 1)
                 Circle()
                     .fill(colors[i % colors.count])
                     .frame(width: 5, height: 5)

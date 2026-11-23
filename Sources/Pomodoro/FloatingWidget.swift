@@ -151,6 +151,7 @@ final class FloatingWidgetController {
         let root = FloatingWidgetView(controller: self)
             .environmentObject(timer)
             .environmentObject(settings)
+            .environmentObject(AppState.shared.stats)
         let host = FirstMouseHostingView(rootView: root)
         let size = host.fittingSize
         host.frame = NSRect(origin: .zero, size: size)
@@ -257,6 +258,7 @@ struct FloatingWidgetView: View {
     let controller: FloatingWidgetController
     @EnvironmentObject private var timer: PomodoroTimer
     @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var stats: StatsStore
     @State private var hovering = false
 
     private var m: WidgetMetrics { WidgetMetrics(settings.widgetSize) }
@@ -282,7 +284,12 @@ struct FloatingWidgetView: View {
 
             HStack(spacing: 8) {
                 progressBar
-                if !m.isMini { cycleDots }
+                if !m.isMini {
+                    cycleDots
+                    if let goal = settings.activeDailyGoal {
+                        goalBadge(goal)
+                    }
+                }
             }
 
             if !m.isMini, let tip = timer.visibleBreakTip {
@@ -395,6 +402,16 @@ struct FloatingWidgetView: View {
             }
         }
         .frame(height: m.barHeight)
+    }
+
+    private func goalBadge(_ goal: Int) -> some View {
+        let today = stats.today.pomodoros
+        let met = today >= goal
+        return Text(met ? "🏆 \(today)" : "\(today)/\(goal)")
+            .font(.system(size: m.labelFont, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(met ? Color.orange : Color.secondary)
+            .help(met ? "Daily goal of \(goal) reached" : "\(today) of \(goal) pomodoros today")
     }
 
     private var cycleDots: some View {
