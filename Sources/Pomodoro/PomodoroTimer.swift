@@ -348,7 +348,8 @@ final class PomodoroTimer: ObservableObject {
                 nextPhase: phase,
                 nextMinutes: nextMinutes,
                 tip: visibleBreakTip,
-                dailyGoal: settings.activeDailyGoal
+                dailyGoal: settings.activeDailyGoal,
+                parkedNotes: AppState.shared.notes.open.count
             ))
         }
     }

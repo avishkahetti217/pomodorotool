@@ -125,6 +125,7 @@ struct BreakScreenView: View {
     @ObservedObject var timer: PomodoroTimer
     @ObservedObject var settings: AppSettings
     @ObservedObject var stats: StatsStore
+    @ObservedObject private var notes = AppState.shared.notes
 
     var body: some View {
         ZStack {
@@ -155,6 +156,21 @@ struct BreakScreenView: View {
                      : "Step away from the screen. We'll bring it back when it's time.")
                     .font(.system(size: 15))
                     .foregroundStyle(.white.opacity(0.5))
+
+                if !AppState.shared.notes.open.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PARKED THOUGHTS")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(2)
+                            .foregroundStyle(.white.opacity(0.45))
+                        NotesList(items: AppState.shared.notes.open, limit: 5, light: true)
+                            .font(.system(size: 15))
+                            .environmentObject(AppState.shared.notes)
+                    }
+                    .frame(width: 420, alignment: .leading)
+                    .padding(16)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
+                }
 
                 Text(progressLine)
                     .font(.system(size: 13, weight: .medium))

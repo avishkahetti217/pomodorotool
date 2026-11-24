@@ -143,6 +143,13 @@ struct CelebrationView: View {
             }
             .font(.caption.weight(.semibold))
 
+            if celebration.parkedNotes > 0 {
+                Label("\(celebration.parkedNotes) parked \(celebration.parkedNotes == 1 ? "thought" : "thoughts") to review on your break",
+                      systemImage: "note.text")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if let tip = celebration.tip {
                 Divider()
                 Label {

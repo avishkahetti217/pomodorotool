@@ -4,7 +4,7 @@ import Combine
 import SwiftUI
 
 enum HotKeyAction: String, CaseIterable, Identifiable, Codable {
-    case toggle, skip, restart
+    case toggle, skip, restart, capture
     var id: String { rawValue }
 
     var label: String {
@@ -12,6 +12,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable, Codable {
         case .toggle: return "Start / Pause"
         case .skip: return "Skip to next phase"
         case .restart: return "Restart current session"
+        case .capture: return "Jot down a thought"
         }
     }
 
@@ -20,6 +21,7 @@ enum HotKeyAction: String, CaseIterable, Identifiable, Codable {
         case .toggle: return 1
         case .skip: return 2
         case .restart: return 3
+        case .capture: return 4
         }
     }
 
@@ -49,6 +51,7 @@ struct Shortcut: Codable, Equatable {
         HotKeyAction.toggle.rawValue: Shortcut(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(controlKey | optionKey), key: "P"),
         HotKeyAction.skip.rawValue: Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey), key: "S"),
         HotKeyAction.restart.rawValue: Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey), key: "R"),
+        HotKeyAction.capture.rawValue: Shortcut(keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey), key: "N"),
     ]
 
     /// Builds a shortcut from a key press; nil if it lacks ⌘, ⌥ or ⌃ (too easy to trigger by accident).
@@ -173,13 +176,16 @@ final class HotKeyManager: ObservableObject {
         case .toggle: timer.toggle()
         case .skip: timer.skip()
         case .restart: timer.reset()
+        case .capture:
+            AppState.shared.notepad.showCapture()
+            return
         }
         showFeedback(for: action)
     }
 
     /// A brief confirmation card, only when the widget isn't already showing the change.
     private func showFeedback(for action: HotKeyAction) {
-        guard widget.visibleFrame == nil else { return }
+        guard widget.visibleFrame == nil, action != .capture else { return }
         let symbol: String
         let title: String
         switch action {
@@ -192,6 +198,8 @@ final class HotKeyManager: ObservableObject {
         case .restart:
             symbol = "arrow.counterclockwise"
             title = "\(timer.phase.title) restarted"
+        case .capture:
+            return
         }
         feedback.show(HotKeyFeedbackView(symbol: symbol, title: title, time: timer.timeString, color: timer.phase.color),
                       autoDismissAfter: 1.4)

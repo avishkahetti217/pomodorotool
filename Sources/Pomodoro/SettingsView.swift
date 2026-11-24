@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum SettingsTab: Hashable { case timer, display, shortcuts, blocking, stats }
+enum SettingsTab: Hashable { case timer, display, shortcuts, blocking, notes, stats }
 
 /// Owns the settings window. A plain NSWindow is used because SwiftUI's `Settings`
 /// scene doesn't reliably come to the front in menu-bar-only apps.
@@ -24,6 +24,7 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
                 .environmentObject(state.settings)
                 .environmentObject(state.stats)
                 .environmentObject(state.timer)
+                .environmentObject(state.notes)
             let w = NSWindow(contentViewController: NSHostingController(rootView: root))
             w.title = "Pomodoro Settings"
             w.styleMask = [.titled, .closable, .miniaturizable]
@@ -62,6 +63,9 @@ struct SettingsView: View {
             BlockingSettingsView()
                 .tabItem { Label("Focus", systemImage: "moon") }
                 .tag(SettingsTab.blocking)
+            NotesSettingsView()
+                .tabItem { Label("Notes", systemImage: "note.text") }
+                .tag(SettingsTab.notes)
             StatsView()
                 .tabItem { Label("Statistics", systemImage: "chart.bar") }
                 .tag(SettingsTab.stats)
@@ -350,7 +354,7 @@ struct ShortcutSettingsView: View {
                     settings.shortcuts = Shortcut.defaults
                 }
             } footer: {
-                Text("Defaults: ⌃⌥P start/pause, ⌃⌥S skip, ⌃⌥R restart. When the floating widget is hidden, a small card briefly confirms what a shortcut did.")
+                Text("Defaults: ⌃⌥P start/pause, ⌃⌥S skip, ⌃⌥R restart, ⌃⌥N jot down a thought. When the floating widget is hidden, a small card briefly confirms what a shortcut did.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

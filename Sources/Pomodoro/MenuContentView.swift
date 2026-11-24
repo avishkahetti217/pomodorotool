@@ -15,6 +15,7 @@ struct MenuContentView: View {
     @EnvironmentObject private var timer: PomodoroTimer
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var stats: StatsStore
+    @EnvironmentObject private var notes: NotesStore
 
     var body: some View {
         VStack(spacing: 14) {
@@ -26,6 +27,10 @@ struct MenuContentView: View {
             }
             controls
             commitmentRow
+            if !notes.open.isEmpty {
+                Divider()
+                parkedThoughts
+            }
             Divider()
             todaySummary
             Divider()
@@ -218,8 +223,34 @@ struct MenuContentView: View {
         }
     }
 
+    /// Hidden during a running focus session (only a count), shown in full otherwise.
+    @ViewBuilder
+    private var parkedThoughts: some View {
+        let count = notes.open.count
+        if timer.phase == .focus && timer.state == .running {
+            Label("\(count) \(count == 1 ? "thought" : "thoughts") parked, they'll show on your break",
+                  systemImage: "note.text")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Parked thoughts", systemImage: "note.text")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                NotesList(items: notes.open, limit: 4)
+                    .font(.callout)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private var footer: some View {
         HStack {
+            Button { AppState.shared.notepad.showCapture() } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .help("Jot down a thought" + hint(.capture))
             Button("Statistics") { SettingsWindowController.shared.show(.stats) }
             Button("Settings…") { SettingsWindowController.shared.show(.timer) }
                 .keyboardShortcut(",", modifiers: .command)

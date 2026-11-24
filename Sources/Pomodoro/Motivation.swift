@@ -52,6 +52,7 @@ struct Celebration {
     let nextMinutes: Int
     let tip: String?
     var dailyGoal: Int? = nil
+    var parkedNotes: Int = 0
 
     var isCycleComplete: Bool { nextPhase == .longBreak }
 

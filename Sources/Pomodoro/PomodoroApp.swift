@@ -16,10 +16,14 @@ final class AppState {
     let alarm: AlarmController
     let breakScreen: BreakScreenController
     let focusMode: FocusModeController
+    let notes: NotesStore
+    let notepad: NotepadController
 
     private init() {
         settings = AppSettings()
         stats = StatsStore()
+        notes = NotesStore()
+        notepad = NotepadController(notes: notes)
         notifier = Notifier()
         blocker = AppBlocker(settings: settings, notifier: notifier)
         timer = PomodoroTimer(settings: settings, stats: stats, notifier: notifier, blocker: blocker)
@@ -68,6 +72,7 @@ struct PomodoroApp: App {
                 .environmentObject(state.timer)
                 .environmentObject(state.settings)
                 .environmentObject(state.stats)
+                .environmentObject(state.notes)
         } label: {
             MenuBarLabel(timer: state.timer)
         }

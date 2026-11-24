@@ -286,9 +286,18 @@ final class AppSettings: ObservableObject {
         celebrateSessions = defaults.bool(forKey: Key.celebrate)
         if let data = defaults.data(forKey: Key.shortcuts),
            let saved = try? JSONDecoder().decode([String: Shortcut].self, from: data) {
-            shortcuts = saved
+            var migrated = saved
+            // Shortcuts added in later versions get their default once, without overriding a user's "Not set".
+            let seenKey = "knownShortcutActions"
+            let seen = Set(defaults.stringArray(forKey: seenKey) ?? ["toggle", "skip", "restart"])
+            for (action, shortcut) in Shortcut.defaults where !seen.contains(action) && migrated[action] == nil {
+                migrated[action] = shortcut
+            }
+            defaults.set(Array(Shortcut.defaults.keys), forKey: seenKey)
+            shortcuts = migrated
         } else {
             shortcuts = Shortcut.defaults
+            defaults.set(Array(Shortcut.defaults.keys), forKey: "knownShortcutActions")
         }
         dailyGoalEnabled = defaults.bool(forKey: Key.goalEnabled)
         dailyGoal = defaults.integer(forKey: Key.goal)

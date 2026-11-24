@@ -460,6 +460,7 @@ struct WidgetMenuItems: View {
             Button("Also Show in Menu Bar") { settings.displayMode = .both }
         }
         Divider()
+        Button("Jot Down a Thought…") { AppState.shared.notepad.showCapture() }
         Button("Statistics…") { SettingsWindowController.shared.show(.stats) }
         Button("Settings…") { SettingsWindowController.shared.show(.display) }
         Divider()
