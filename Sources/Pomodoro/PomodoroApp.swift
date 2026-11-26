@@ -18,6 +18,7 @@ final class AppState {
     let focusMode: FocusModeController
     let notes: NotesStore
     let notepad: NotepadController
+    let pauseConfirm: PauseConfirmController
 
     private init() {
         settings = AppSettings()
@@ -34,6 +35,8 @@ final class AppState {
         alarm = AlarmController(widget: widget, timer: timer, settings: settings)
         breakScreen = BreakScreenController(timer: timer, settings: settings, stats: stats)
         focusMode = FocusModeController(timer: timer, settings: settings)
+        pauseConfirm = PauseConfirmController(timer: timer, settings: settings, notepad: notepad)
+        timer.onPauseRequested = { [pauseConfirm] in pauseConfirm.ask() }
         timer.onFocusCompleted = { [celebration] in celebration.show($0) }
     }
 }

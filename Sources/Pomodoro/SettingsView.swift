@@ -133,6 +133,8 @@ struct TimerSettingsView: View {
             Section("Automation") {
                 Toggle("Start breaks automatically", isOn: $settings.autoStartBreaks)
                 Toggle("Start the next focus session automatically", isOn: $settings.autoStartFocus)
+                Toggle("Ask before pausing a focus session", isOn: $settings.confirmPause)
+                    .help("Shows a warning with the option to park the distraction as a note instead")
             }
 
             Section {

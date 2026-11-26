@@ -137,9 +137,26 @@ final class PomodoroTimer: ObservableObject {
 
     // MARK: - Controls
 
+    /// Used by every Start/Pause button and the shortcut. Pausing a running focus session asks first
+    /// (if enabled); auto-pause on away and `pause()` itself never ask.
     func toggle() {
-        state == .running ? pause() : start()
+        if state == .running {
+            if needsPauseConfirmation, let ask = onPauseRequested {
+                ask()
+            } else {
+                pause()
+            }
+        } else {
+            start()
+        }
     }
+
+    var needsPauseConfirmation: Bool {
+        settings.confirmPause && phase == .focus && state == .running
+    }
+
+    /// Shows the "are you sure?" prompt; it calls `pause()` if the user confirms.
+    var onPauseRequested: (() -> Void)?
 
     func start() {
         guard state != .running else { return }

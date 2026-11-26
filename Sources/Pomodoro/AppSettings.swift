@@ -86,6 +86,7 @@ final class AppSettings: ObservableObject {
         static let autoBreaks = "autoStartBreaks"
         static let autoFocus = "autoStartFocus"
         static let commitCycle = "commitFullCycle"
+        static let confirmPause = "confirmPause"
         static let focusMode = "focusModeEnabled"
         static let focusModeBreaks = "focusModeDuringBreaks"
         static let focusOnShortcut = "focusOnShortcut"
@@ -219,6 +220,11 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(focusOffShortcut, forKey: Key.focusOffShortcut) }
     }
 
+    /// Ask "are you sure?" before a focus session is paused by hand.
+    @Published var confirmPause: Bool {
+        didSet { defaults.set(confirmPause, forKey: Key.confirmPause) }
+    }
+
     @Published var breakScreenMode: BreakScreenMode {
         didSet { defaults.set(breakScreenMode.rawValue, forKey: Key.breakScreen) }
     }
@@ -259,6 +265,7 @@ final class AppSettings: ObservableObject {
             Key.autoBreaks: false,
             Key.autoFocus: false,
             Key.commitCycle: false,
+            Key.confirmPause: true,
             Key.focusMode: false,
             Key.focusModeBreaks: false,
             Key.focusOnShortcut: FocusModeController.defaultOnName,
@@ -312,6 +319,7 @@ final class AppSettings: ObservableObject {
         autoStartBreaks = defaults.bool(forKey: Key.autoBreaks)
         autoStartFocus = defaults.bool(forKey: Key.autoFocus)
         commitFullCycle = defaults.bool(forKey: Key.commitCycle)
+        confirmPause = defaults.bool(forKey: Key.confirmPause)
         focusModeEnabled = defaults.bool(forKey: Key.focusMode)
         focusModeDuringBreaks = defaults.bool(forKey: Key.focusModeBreaks)
         focusOnShortcut = defaults.string(forKey: Key.focusOnShortcut) ?? FocusModeController.defaultOnName

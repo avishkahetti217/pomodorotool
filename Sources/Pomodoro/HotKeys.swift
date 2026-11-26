@@ -173,7 +173,10 @@ final class HotKeyManager: ObservableObject {
     private func fire(_ id: UInt32) {
         guard let action = HotKeyAction(numericID: id) else { return }
         switch action {
-        case .toggle: timer.toggle()
+        case .toggle:
+            let willAsk = timer.needsPauseConfirmation
+            timer.toggle()
+            if willAsk { return }  // the prompt itself is the feedback
         case .skip: timer.skip()
         case .restart: timer.reset()
         case .capture:
